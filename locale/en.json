@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Agent Danmu",
+    "description": "Shows the agent's reasoning, tool calls and task progress as scrolling text inside the conversation area."
+  }
+}
