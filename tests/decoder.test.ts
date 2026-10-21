@@ -72,6 +72,75 @@ test('轮次耗时分钟', () => {
 
   expect(result).toEqual([{ mode: Mode.Top, text: '已完成，用时 1 分 5 秒' }]);
 });
+test('模型重试排期', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('llm/retry', {
+        turn: 1,
+        retryId: 'r1',
+        retry: 2,
+        maxRetries: 5,
+        mode: 'normal',
+      }),
+    ),
+  );
+
+  expect(result).toEqual([{ mode: Mode.Top, text: '等待重试模型请求（2/5）' }]);
+});
+test('模型重试开始', () => {
+  const decoder = new DanmuDecoder();
+
+  decoder.change(
+    append(
+      event('llm/retry', {
+        turn: 1,
+        retryId: 'r1',
+        retry: 2,
+        maxRetries: 5,
+        mode: 'normal',
+      }),
+    ),
+  );
+  expect(
+    decoder.change(
+      append(event('llm/retry-started', { turn: 1, retryId: 'r1', retry: 2 })),
+    ),
+  ).toEqual([{ mode: Mode.Top, text: '正在重试模型请求（2/5）' }]);
+});
+test('无限重试与缺少排期', () => {
+  const decoder = new DanmuDecoder();
+
+  expect(
+    decoder.change(
+      append(
+        event('llm/retry', {
+          turn: 1,
+          retryId: 'r2',
+          retry: 1,
+          mode: 'always',
+        }),
+      ),
+    ),
+  ).toEqual([{ mode: Mode.Top, text: '等待重试模型请求（1）' }]);
+  expect(
+    decoder.change(
+      append(
+        event('llm/retry-started', {
+          turn: 1,
+          retryId: 'missing',
+          retry: 1,
+        }),
+      ),
+    ),
+  ).toEqual([{ mode: Mode.Top, text: '正在重试模型请求（1）' }]);
+});
+test('重试缺少次数', () => {
+  const result = new DanmuDecoder().change(
+    append(event('llm/retry', { turn: 1, retryId: 'r3', mode: 'normal' })),
+  );
+
+  expect(result).toEqual([]);
+});
 test('推理增量', () => {
   const result = new DanmuDecoder().change(
     append(live({ type: 'reasoning-delta', index: 0, text: 'Alpha. Beta.\n' })),

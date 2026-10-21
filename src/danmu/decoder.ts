@@ -3,7 +3,7 @@
  */
 
 /**
- * 会话事件目录如下。
+ * 会话事件目录。
  *
  * 事件名取自 `@deepseek-ai/dsh-session` 的 `KNOWN_SESSION_EVENT_TYPES`，
  * 共 62 个持久事件，另有瞬时的 `assistant/live-chunk` 流。
@@ -11,50 +11,50 @@
  * `[部分接入]` 表示仅使用其中部分字段，`[未接入]` 表示尚未接入。
  * 事件名与载荷以 `dsh-session` 及声明该事件的插件为准。
  *
- * 模型消息（surface，5 项）如下。
+ * 模型消息（surface，5 项）。
  * - [未接入] system/message：系统提示词正文。
  * - [未接入] developer/message：开发者指令与注入上下文。
  * - [未接入] user/message：用户输入或注入的用户上下文。
  * - [未接入] assistant/message：模型最终回复，含正文与推理块。
  * - [未接入] tool/result：工具结果，含结果内容与失败原因。
  *
- * 生成过程如下。
+ * 生成过程。
  * - [部分接入] assistant/live-chunk（瞬时流），
  *   reasoning-delta 已接入，text-delta 与 tool-call-delta 未接入。
  * - [未接入] assistant/attempt：失败、重试或取消的模型尝试记录。
- * - [未接入] llm/retry / llm/retry-started：模型重试与重试启动。
+ * - [已接入] llm/retry / llm/retry-started，顶部弹幕。
  *
- * 轮次与步骤如下。
+ * 轮次与步骤。
  * - [已接入] turn/start / turn/end，顶部弹幕。
  * - [部分接入] step/end，用于收尾；step/start 未接入。
  *
- * 工具与行动如下。
+ * 工具与行动。
  * - [未接入] tool/call。
  * - [未接入] tool/ptc-dispatch / tool/ptc-dispatch-start。
  * - [未接入] tool-workflow/agent-start、tool-workflow/agent-end，
  *   tool-workflow/run-start、tool-workflow/run-end。
  *
- * 任务与状态如下。
+ * 任务与状态。
  * - [未接入] todo/write。
  * - [未接入] plan/mode / goal/change / schedule/change。
  * - [未接入] job/registered / job/settled。
  *
- * 审批与权限如下。
+ * 审批与权限。
  * - [未接入] approval/asked / approval/decided / approval/policy。
  * - [未接入] permission/preset / sandbox/mode。
  *
- * 上下文压缩如下。
+ * 上下文压缩。
  * - [未接入] compaction/start、compaction/end，
  *   compaction/prune、compaction/summary。
  *
- * 子代理与团队如下。
+ * 子代理与团队。
  * - [未接入] subagent/catalog / subagent/descriptor / subagent/model-selection-policy。
  * - [未接入] team/member / team/task / team/message/queued / team/message/delivered。
  *
- * 工作区与交付如下。
+ * 工作区与交付。
  * - [未接入] workspace/changes / working-directory/change / deliverables/presented。
  *
- * 外围如下。
+ * 外围。
  * - [未接入] command/run / command/done。
  * - [未接入] feedback/record / feedback/message-put / feedback/message-delete。
  * - [未接入] hook/invoked / hook/result。
@@ -111,11 +111,13 @@ export type SessionChangeLike =
 
 export class DanmuDecoder {
   private readonly turnStarts = new Map<number, number>();
+  private readonly retryLimits = new Map<string, number>();
   private readonly snippets = new SnippetBuffer();
 
   /** 清空跨会话状态。 */
   reset(): void {
     this.turnStarts.clear();
+    this.retryLimits.clear();
     this.snippets.reset();
   }
 
@@ -166,6 +168,33 @@ export class DanmuDecoder {
         released.push(...this.flushSnippets());
       } else if (event.type === 'step/end') {
         released.push(...this.flushSnippets());
+      } else if (event.type === 'llm/retry') {
+        const retryId = readString(data.retryId);
+        const retry = readNumber(data.retry);
+        const max = readNumber(data.maxRetries);
+
+        if (retryId !== null && max !== null) {
+          this.retryLimits.set(retryId, max);
+        }
+
+        if (retry !== null) {
+          released.push({
+            mode: Mode.Top,
+            text: retryText('等待重试模型请求', retry, max),
+          });
+        }
+      } else if (event.type === 'llm/retry-started') {
+        const retryId = readString(data.retryId);
+        const retry = readNumber(data.retry);
+        const max =
+          retryId === null ? null : (this.retryLimits.get(retryId) ?? null);
+
+        if (retry !== null) {
+          released.push({
+            mode: Mode.Top,
+            text: retryText('正在重试模型请求', retry, max),
+          });
+        }
       }
     }
     return released;
@@ -269,4 +298,9 @@ function formatDuration(ms: number): string {
   parts.push(`${seconds} 秒`);
 
   return parts.join(' ');
+}
+
+/** 与 DSH 客户端一致的重试状态文案，例如「等待重试模型请求（1/5）」。 */
+function retryText(label: string, retry: number, max: number | null): string {
+  return max === null ? `${label}（${retry}）` : `${label}（${retry}/${max}）`;
 }
