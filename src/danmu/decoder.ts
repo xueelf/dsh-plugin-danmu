@@ -19,14 +19,14 @@
  * - [未接入] tool/result：工具结果，含结果内容与失败原因。
  *
  * 生成过程如下。
- * - [未接入] assistant/live-chunk（瞬时流），
- *   reasoning-delta、text-delta 与 tool-call-delta 均未接入。
+ * - [部分接入] assistant/live-chunk（瞬时流），
+ *   reasoning-delta 已接入，text-delta 与 tool-call-delta 未接入。
  * - [未接入] assistant/attempt：失败、重试或取消的模型尝试记录。
  * - [未接入] llm/retry / llm/retry-started：模型重试与重试启动。
  *
  * 轮次与步骤如下。
- * - [未接入] turn/start / turn/end。
- * - [未接入] step/start / step/end。
+ * - [已接入] turn/start / turn/end，顶部弹幕。
+ * - [部分接入] step/end，用于收尾；step/start 未接入。
  *
  * 工具与行动如下。
  * - [未接入] tool/call。
@@ -66,6 +66,8 @@
  * - [未接入] session-log-deepseek/delivery-accepted。
  */
 
+import { type Snippet, SnippetBuffer } from './snippet';
+
 /** 弹幕模式，取值与 B 站网页端的 `mode` 枚举一致。 */
 export const Mode = {
   Roll: 1,
@@ -78,8 +80,6 @@ export type Mode = (typeof Mode)[keyof typeof Mode];
 
 /** 一条进入弹幕渲染的数据。 */
 export interface TextData {
-  /** 稳定标识，同一标识不会重复出现。 */
-  readonly id: string;
   readonly mode: Mode;
   readonly text: string;
 }
@@ -87,6 +87,7 @@ export interface TextData {
 /** 一条已落盘的会话事件。 */
 export interface DurableEventLike {
   readonly type: string;
+  readonly time?: number;
   readonly data?: unknown;
 }
 
@@ -109,7 +110,163 @@ export type SessionChangeLike =
   | { readonly kind: 'settle-assistant'; readonly attemptId: string };
 
 export class DanmuDecoder {
-  change(_change: SessionChangeLike): TextData[] {
+  private readonly turnStarts = new Map<number, number>();
+  private readonly snippets = new SnippetBuffer();
+
+  /** 清空跨会话状态。 */
+  reset(): void {
+    this.turnStarts.clear();
+    this.snippets.reset();
+  }
+
+  change(change: SessionChangeLike): TextData[] {
+    if (change.kind === 'replace') {
+      this.reset();
+
+      return [];
+    }
+
+    if (change.kind !== 'append') {
+      return [];
+    }
+    const released: TextData[] = [];
+
+    for (const entry of change.entries) {
+      if (entry.type === 'transient') {
+        released.push(...this.live(entry.event));
+
+        continue;
+      }
+      const event = entry.event;
+      const data = readRecord(event.data);
+
+      if (data === null) {
+        continue;
+      }
+      const turn = readNumber(data.turn);
+
+      if (turn === null) {
+        continue;
+      }
+
+      if (event.type === 'turn/start') {
+        if (event.time !== undefined) {
+          this.turnStarts.set(turn, event.time);
+        }
+        released.push({
+          mode: Mode.Top,
+          text: `第 ${turn} 轮`,
+        });
+      } else if (event.type === 'turn/end') {
+        released.push({
+          mode: Mode.Top,
+          text: this.turnEndText(turn, event.time, data.reason),
+        });
+        this.turnStarts.delete(turn);
+        released.push(...this.flushSnippets());
+      } else if (event.type === 'step/end') {
+        released.push(...this.flushSnippets());
+      }
+    }
+    return released;
+  }
+
+  private live(event: LiveChunkLike): TextData[] {
+    if (event.type !== 'assistant/live-chunk') {
+      return [];
+    }
+    const data = readRecord(event.data);
+
+    if (data === null) {
+      return [];
+    }
+    const chunk = readRecord(data.chunk);
+
+    if (chunk === null) {
+      return [];
+    }
+    const text = readString(chunk.text);
+
+    if (chunk.type === 'reasoning-delta' && text !== null) {
+      return this.emitSnippets(this.snippets.push(text));
+    }
+
+    if (chunk.type === 'block-end') {
+      const block = readRecord(chunk.block);
+
+      if (readString(block?.type) === 'reasoning') {
+        return this.emitSnippets(this.snippets.flush());
+      }
+    }
     return [];
   }
+
+  private emitSnippets(snippets: readonly Snippet[]): TextData[] {
+    return snippets.map(snippet => ({
+      mode: snippet.kind === 'table' ? Mode.Top : Mode.Roll,
+      text: snippet.text,
+    }));
+  }
+
+  private flushSnippets(): TextData[] {
+    return this.emitSnippets(this.snippets.flush());
+  }
+
+  private turnEndText(
+    turn: number,
+    endTime: number | undefined,
+    reason: unknown,
+  ): string {
+    const kind = readString(readRecord(reason)?.kind);
+
+    if (kind === 'aborted' || kind === 'interrupted') {
+      return '已停止';
+    }
+
+    if (kind === 'error') {
+      return '处理失败';
+    }
+    const startTime = this.turnStarts.get(turn);
+
+    if (startTime === undefined || endTime === undefined) {
+      return '已完成';
+    }
+    return `已完成，用时 ${formatDuration(Math.max(1000, endTime - startTime))}`;
+  }
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function readNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** 与 DSH 客户端一致的轮次耗时格式。 */
+function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor(total / 60) % 60;
+  const seconds = total % 60;
+  const parts: string[] = [];
+
+  if (hours > 0) {
+    parts.push(`${hours} 小时`);
+  }
+
+  if (total >= 60) {
+    parts.push(`${minutes} 分`);
+  }
+  parts.push(`${seconds} 秒`);
+
+  return parts.join(' ');
 }

@@ -54,6 +54,8 @@ export function createSessionSource(ctx: SourceContext): DanmuSource {
 
   return {
     attach(sessionId, emit) {
+      decoder.reset();
+
       if (sessionId === undefined) {
         return noop;
       }
