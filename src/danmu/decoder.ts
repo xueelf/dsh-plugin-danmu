@@ -25,8 +25,8 @@
  * - [已接入] llm/retry / llm/retry-started，顶部弹幕。
  *
  * 轮次与步骤。
- * - [已接入] turn/start / turn/end，顶部弹幕。
- * - [部分接入] step/end，用于收尾；step/start 未接入。
+ * - [已接入] turn/start / turn/end / step/start，顶部弹幕。
+ * - [部分接入] step/end，用于收尾。
  *
  * 工具与行动。
  * - [未接入] tool/call。
@@ -166,6 +166,12 @@ export class DanmuDecoder {
         });
         this.turnStarts.delete(turn);
         released.push(...this.flushSnippets());
+      } else if (event.type === 'step/start') {
+        const step = readNumber(data.step);
+
+        if (step !== null) {
+          released.push({ mode: Mode.Top, text: `第 ${step} 步` });
+        }
       } else if (event.type === 'step/end') {
         released.push(...this.flushSnippets());
       } else if (event.type === 'llm/retry') {

@@ -72,6 +72,20 @@ test('轮次耗时分钟', () => {
 
   expect(result).toEqual([{ mode: Mode.Top, text: '已完成，用时 1 分 5 秒' }]);
 });
+test('步骤开始', () => {
+  const result = new DanmuDecoder().change(
+    append(event('step/start', { turn: 1, step: 2 })),
+  );
+
+  expect(result).toEqual([{ mode: Mode.Top, text: '第 2 步' }]);
+});
+test('步骤缺少编号', () => {
+  const result = new DanmuDecoder().change(
+    append(event('step/start', { turn: 1 })),
+  );
+
+  expect(result).toEqual([]);
+});
 test('模型重试排期', () => {
   const result = new DanmuDecoder().change(
     append(
