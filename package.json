@@ -26,7 +26,8 @@
     "dist",
     "cordis.patch.yml",
     "locale/*.json",
-    "icon.svg"
+    "icon.svg",
+    "licenses/*"
   ],
   "scripts": {
     "build": "bun run scripts/build.ts",
@@ -34,6 +35,7 @@
     "format:check": "prettier \"**/*.{json,md,ts,yaml,yml}\" --check --experimental-cli",
     "lint": "eslint --cache",
     "lint:fix": "eslint --fix --cache",
+    "prepack": "bun run build",
     "prepare": "husky",
     "typecheck": "tsc --noEmit"
   },
@@ -49,6 +51,7 @@
     "husky": "^9.1.7",
     "prettier": "^3.9.8",
     "prettier-plugin-sort": "^1.1.2",
+    "remove-markdown": "^0.8.0",
     "typescript-eslint": "^8.70.1"
   },
   "peerDependencies": {
