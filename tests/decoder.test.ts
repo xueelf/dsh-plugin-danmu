@@ -86,6 +86,40 @@ test('步骤缺少编号', () => {
 
   expect(result).toEqual([]);
 });
+test('上下文压缩', () => {
+  const decoder = new DanmuDecoder();
+
+  expect(
+    decoder.change(
+      append(event('compaction/start', { compactionId: 'c1', turn: 1 })),
+    ),
+  ).toEqual([{ mode: Mode.Top, text: '正在压缩上下文…' }]);
+  expect(
+    decoder.change(
+      append(event('compaction/end', { compactionId: 'c1', turn: 1 })),
+    ),
+  ).toEqual([{ mode: Mode.Top, text: '上下文已压缩' }]);
+});
+test('上下文压缩失败', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('compaction/end', {
+        compactionId: 'c2',
+        turn: 1,
+        error: 'boom',
+      }),
+    ),
+  );
+
+  expect(result).toEqual([{ mode: Mode.Top, text: '上下文压缩失败' }]);
+});
+test('压缩事件没有轮次', () => {
+  const result = new DanmuDecoder().change(
+    append(event('compaction/start', { compactionId: 'c3', turn: null })),
+  );
+
+  expect(result).toEqual([{ mode: Mode.Top, text: '正在压缩上下文…' }]);
+});
 test('模型重试排期', () => {
   const result = new DanmuDecoder().change(
     append(

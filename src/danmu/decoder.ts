@@ -44,8 +44,8 @@
  * - [未接入] permission/preset / sandbox/mode。
  *
  * 上下文压缩。
- * - [未接入] compaction/start、compaction/end，
- *   compaction/prune、compaction/summary。
+ * - [已接入] compaction/start / compaction/end，顶部弹幕。
+ * - [未接入] compaction/prune、compaction/summary。
  *
  * 子代理与团队。
  * - [未接入] subagent/catalog / subagent/descriptor / subagent/model-selection-policy。
@@ -143,6 +143,26 @@ export class DanmuDecoder {
       const data = readRecord(event.data);
 
       if (data === null) {
+        continue;
+      }
+
+      // 文案取自 DSH 客户端的 layout.compacting、layout.compacted、
+      // layout.compactionFailed。
+      if (event.type === 'compaction/start') {
+        released.push({ mode: Mode.Top, text: '正在压缩上下文…' });
+
+        continue;
+      }
+
+      if (event.type === 'compaction/end') {
+        const error = readString(data.error);
+
+        released.push({
+          mode: Mode.Top,
+          text:
+            error === null || error === '' ? '上下文已压缩' : '上下文压缩失败',
+        });
+
         continue;
       }
       const turn = readNumber(data.turn);
