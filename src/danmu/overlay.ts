@@ -22,12 +22,14 @@
  */
 
 import type { ReactElement } from 'react';
+import { CenterAllocator } from './center';
 import { type TextData, Mode } from './decoder';
 import { getFontSize, REFERENCE_SIZE } from './font';
 import { type BandRect, type ConversationBoxStore, bandRect } from './region';
 import type { DanmuSource } from './source';
 import {
   type MotionTiming,
+  DEFAULT_DURATION,
   DEFAULT_TIMING,
   SpaceManager,
 } from './space-manager';
@@ -249,6 +251,7 @@ export function createDanmuOverlay(
     const hostRef = React.useRef<HTMLDivElement | null>(null);
     const containerRef = React.useRef<HTMLDivElement | null>(null);
     const layoutRef = React.useRef<SpaceManager | null>(null);
+    const centerRef = React.useRef<CenterAllocator | null>(null);
     const elementsRef = React.useRef(new Set<HTMLDivElement>());
     const timersRef = React.useRef(new Set<number>());
     const scaleRef = React.useRef<{
@@ -266,6 +269,10 @@ export function createDanmuOverlay(
 
     if (layoutRef.current === null) {
       layoutRef.current = new SpaceManager(timing);
+    }
+
+    if (centerRef.current === null) {
+      centerRef.current = new CenterAllocator();
     }
     const box = region.read();
     const band: BandRect | null =
@@ -314,6 +321,7 @@ export function createDanmuOverlay(
       }
       elementsRef.current.clear();
       layoutRef.current = new SpaceManager(timing);
+      centerRef.current = new CenterAllocator();
     }, [timing]);
 
     // 切换会话时，上一会话的弹幕不应继续显示。
@@ -343,8 +351,7 @@ export function createDanmuOverlay(
       return scale;
     };
     const push = React.useCallback((textData: TextData) => {
-      // 非滚动模式尚未接入，先忽略。
-      if (textData.mode !== Mode.Roll) {
+      if (textData.mode !== Mode.Roll && textData.mode !== Mode.Top) {
         return;
       }
       // 布局变化可能移动标记点，但不改变观察者监测的尺寸。
@@ -354,8 +361,9 @@ export function createDanmuOverlay(
 
       const container = containerRef.current;
       const spaceManager = layoutRef.current;
+      const center = centerRef.current;
 
-      if (container === null || spaceManager === null) {
+      if (container === null || spaceManager === null || center === null) {
         return;
       }
       const containerWidth = container.offsetWidth;
@@ -392,6 +400,36 @@ export function createDanmuOverlay(
 
         return { width: rect.width, height: rect.height };
       });
+      const removeAfter = (node: HTMLDivElement, seconds: number): void => {
+        const timer = window.setTimeout(() => {
+          node.remove();
+          elementsRef.current.delete(node);
+          timersRef.current.delete(timer);
+        }, seconds * 1000);
+
+        timersRef.current.add(timer);
+      };
+
+      if (textData.mode === Mode.Top) {
+        const y = center.add({
+          height: measured.height,
+          now,
+          containerHeight,
+          area,
+        });
+
+        if (y === null) {
+          element.remove();
+
+          return;
+        }
+        elementsRef.current.add(element);
+        element.style.cssText += `--translateY:${y}px;`;
+        element.classList.add(`${CLASS}-center`, `${CLASS}-show`);
+        removeAfter(element, DEFAULT_DURATION);
+
+        return;
+      }
       const placement = spaceManager.add({
         width: measured.width,
         height: measured.height,
@@ -413,14 +451,7 @@ export function createDanmuOverlay(
         `--duration:${placement.duration}s;` +
         `--top:${placement.y}px;`;
       element.classList.add(`${CLASS}-roll`, `${CLASS}-show`);
-
-      const timer = window.setTimeout(() => {
-        element.remove();
-        elementsRef.current.delete(element);
-        timersRef.current.delete(timer);
-      }, placement.duration * 1000);
-
-      timersRef.current.add(timer);
+      removeAfter(element, placement.duration);
     }, []);
 
     React.useEffect(
