@@ -23,6 +23,11 @@ import {
   SETTINGS_NS,
 } from './danmu/settings-ui';
 import { type SourceContext, createSessionSource } from './danmu/source';
+import {
+  DANMU_STYLE_MARK,
+  removeStyle,
+  SETTINGS_STYLE_MARK,
+} from './danmu/style';
 
 const PACKAGE_NAME = 'dsh-plugin-danmu';
 /**
@@ -138,18 +143,14 @@ const definition: ModuleLoaderDefinition = {
           };
         }, 'danmu: locale');
         ctx.effect(() => {
-          document.querySelector('style[data-dsh-danmu-style]')?.remove();
-          document
-            .querySelector('style[data-dsh-danmu-settings-style]')
-            ?.remove();
+          removeStyle(DANMU_STYLE_MARK);
+          removeStyle(SETTINGS_STYLE_MARK);
           ensureDanmuStyles();
           ensureSettingsStyles();
 
           return () => {
-            document.querySelector('style[data-dsh-danmu-style]')?.remove();
-            document
-              .querySelector('style[data-dsh-danmu-settings-style]')
-              ?.remove();
+            removeStyle(DANMU_STYLE_MARK);
+            removeStyle(SETTINGS_STYLE_MARK);
           };
         }, 'danmu: styles');
 

@@ -33,6 +33,7 @@ import {
   DEFAULT_TIMING,
   SpaceManager,
 } from './space-manager';
+import { DANMU_STYLE_MARK, ensureStyle } from './style';
 import { type SizeScale, measureSizeScale, textSize } from './text';
 
 /** 本模块用到的最小 React 接口，由模块表满足。 */
@@ -82,8 +83,6 @@ const FAMILY = DEFAULT_FAMILY;
 const BOLD = true;
 /** B 站网页端默认描边类型：四向 1px 投影。 */
 const FONT_BORDER = 0;
-/** 样式表元素上的标记，避免重复注入。 */
-const STYLE_MARK = 'data-dsh-danmu-style';
 /** 复刻 B 站网页端的样式规则。 */
 const DANMU_CSS = `
 .${CLASS} {
@@ -165,17 +164,7 @@ const DANMU_CSS = `
 `;
 
 export function ensureDanmuStyles(): void {
-  if (
-    typeof document === 'undefined' ||
-    document.querySelector(`style[${STYLE_MARK}]`) !== null
-  ) {
-    return;
-  }
-  const style = document.createElement('style');
-
-  style.setAttribute(STYLE_MARK, '');
-  style.textContent = DANMU_CSS;
-  document.head.append(style);
+  ensureStyle(DANMU_STYLE_MARK, DANMU_CSS);
 }
 
 /** 描边颜色，与 B 站网页端的 `outlineColor` 一致：文字为黑时返回白，否则返回黑。 */
