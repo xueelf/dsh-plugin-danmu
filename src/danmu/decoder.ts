@@ -29,7 +29,8 @@
  * - [部分接入] step/end，用于收尾。
  *
  * 工具与行动。
- * - [未接入] tool/call。
+ *
+ * - [已接入] tool/call，滚动弹幕。
  * - [未接入] tool/ptc-dispatch / tool/ptc-dispatch-start。
  * - [未接入] tool-workflow/agent-start、tool-workflow/agent-end，
  *   tool-workflow/run-start、tool-workflow/run-end。
@@ -194,6 +195,15 @@ export class DanmuDecoder {
         }
       } else if (event.type === 'step/end') {
         released.push(...this.flushSnippets());
+      } else if (event.type === 'tool/call') {
+        const name = readString(data.name);
+        const raw = readString(data.arguments);
+        const text =
+          name === null || raw === null ? null : toolCallText(name, raw);
+
+        if (text !== null) {
+          released.push({ mode: Mode.Roll, text });
+        }
       } else if (event.type === 'llm/retry') {
         const retryId = readString(data.retryId);
         const retry = readNumber(data.retry);
@@ -329,4 +339,107 @@ function formatDuration(ms: number): string {
 /** 与 DSH 客户端一致的重试状态文案，例如「等待重试模型请求（1/5）」。 */
 function retryText(label: string, retry: number, max: number | null): string {
   return max === null ? `${label}（${retry}）` : `${label}（${retry}/${max}）`;
+}
+
+/** 各工具取作弹幕文本的主参数。 */
+const TOOL_ARGUMENT_KEYS: Readonly<Record<string, string>> = {
+  read: 'file_path',
+  read_image: 'file_path',
+  write: 'file_path',
+  edit: 'file_path',
+  grep: 'pattern',
+  glob: 'pattern',
+  web_fetch: 'url',
+  web_search: 'queries',
+  session_search: 'query',
+  session_event_search: 'query',
+  skill: 'name',
+  subagent: 'description',
+  cordis_inspect_query: 'method',
+};
+/** 会话自检工具，不是智能体的任务活动，跳过。 */
+const TOOL_SKIP = new Set(['session_event_read', 'session_trace']);
+
+/** 把 tool/call 的参数摘要成一条弹幕文本。 */
+function toolCallText(name: string, raw: string): string | null {
+  if (TOOL_SKIP.has(name)) {
+    return null;
+  }
+  const args = readArguments(raw);
+
+  if (args === null) {
+    return null;
+  }
+
+  if (name === 'bash') {
+    return bashText(args);
+  }
+  const value = primaryArgument(name, args);
+
+  if (value === null) {
+    return null;
+  }
+  const text = oneLine(value);
+
+  return text === '' ? null : `${name} ${text}`;
+}
+
+/** bash 用模型写的 description，缺失或为空时不发。 */
+function bashText(args: Record<string, unknown>): string | null {
+  const description = readString(args.description);
+
+  if (description === null) {
+    return null;
+  }
+  const text = oneLine(description);
+
+  return text === '' ? null : text;
+}
+
+function oneLine(text: string): string {
+  return text.replace(/[\r\n\t]+/gu, ' ').trim();
+}
+
+function readArguments(raw: string): Record<string, unknown> | null {
+  try {
+    return readRecord(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function primaryArgument(
+  name: string,
+  args: Record<string, unknown>,
+): string | null {
+  const key = TOOL_ARGUMENT_KEYS[name];
+  const preferred = key === undefined ? null : argumentText(args[key]);
+
+  if (preferred !== null && preferred !== '') {
+    return preferred;
+  }
+
+  for (const value of Object.values(args)) {
+    const text = argumentText(value);
+
+    if (text !== null && text !== '') {
+      return text;
+    }
+  }
+  return null;
+}
+
+function argumentText(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const parts = value.filter(
+      (item): item is string => typeof item === 'string',
+    );
+
+    return parts.length === 0 ? null : parts.join(' ');
+  }
+  return null;
 }

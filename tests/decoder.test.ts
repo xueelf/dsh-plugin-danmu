@@ -120,6 +120,176 @@ test('压缩事件没有轮次', () => {
 
   expect(result).toEqual([{ mode: Mode.Top, text: '正在压缩上下文…' }]);
 });
+test('工具调用', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('tool/call', {
+        turn: 1,
+        step: 1,
+        name: 'bash',
+        arguments: JSON.stringify({
+          command: 'bun test',
+          description: 'Run tests',
+        }),
+      }),
+    ),
+  );
+
+  expect(result).toEqual([{ mode: Mode.Roll, text: 'Run tests' }]);
+});
+test('工具调用空描述不发', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('tool/call', {
+        turn: 1,
+        step: 1,
+        name: 'bash',
+        arguments: JSON.stringify({
+          command: 'git status',
+          description: '',
+        }),
+      }),
+    ),
+  );
+
+  expect(result).toEqual([]);
+});
+test('工具调用带读取前缀', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('tool/call', {
+        turn: 1,
+        step: 1,
+        name: 'read',
+        arguments: JSON.stringify({
+          file_path: 'src/danmu/decoder.ts',
+          limit: 40,
+        }),
+      }),
+    ),
+  );
+
+  expect(result).toEqual([
+    { mode: Mode.Roll, text: 'read src/danmu/decoder.ts' },
+  ]);
+});
+test('工具调用带写入前缀', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('tool/call', {
+        turn: 1,
+        step: 1,
+        name: 'write',
+        arguments: JSON.stringify({
+          file_path: 'package.json',
+          content: '{}',
+        }),
+      }),
+    ),
+  );
+
+  expect(result).toEqual([{ mode: Mode.Roll, text: 'write package.json' }]);
+});
+test('工具调用带抓取前缀', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('tool/call', {
+        turn: 1,
+        step: 1,
+        name: 'web_fetch',
+        arguments: JSON.stringify({ url: 'https://example.com' }),
+      }),
+    ),
+  );
+
+  expect(result).toEqual([
+    { mode: Mode.Roll, text: 'web_fetch https://example.com' },
+  ]);
+});
+test('工具调用缺少描述不发', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('tool/call', {
+        turn: 1,
+        step: 1,
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'echo one\necho two' }),
+      }),
+    ),
+  );
+
+  expect(result).toEqual([]);
+});
+test('工具调用跳过会话自检', () => {
+  const decoder = new DanmuDecoder();
+
+  expect(
+    decoder.change(
+      append(
+        event('tool/call', {
+          turn: 1,
+          step: 1,
+          name: 'session_event_read',
+          arguments: JSON.stringify({ seq: 796, session_id: 's' }),
+        }),
+      ),
+    ),
+  ).toEqual([]);
+  expect(
+    decoder.change(
+      append(
+        event('tool/call', {
+          turn: 1,
+          step: 1,
+          name: 'session_trace',
+          arguments: JSON.stringify({ session_id: 's' }),
+        }),
+      ),
+    ),
+  ).toEqual([]);
+});
+test('工具调用数组参数', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('tool/call', {
+        turn: 1,
+        step: 1,
+        name: 'web_search',
+        arguments: JSON.stringify({ queries: ['bun', 'test'] }),
+      }),
+    ),
+  );
+
+  expect(result).toEqual([{ mode: Mode.Roll, text: 'web_search bun test' }]);
+});
+test('工具调用回退到第一个字符串参数', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('tool/call', {
+        turn: 1,
+        step: 1,
+        name: 'custom',
+        arguments: JSON.stringify({ count: 3, label: 'do it' }),
+      }),
+    ),
+  );
+
+  expect(result).toEqual([{ mode: Mode.Roll, text: 'custom do it' }]);
+});
+test('工具调用参数不可解析', () => {
+  const result = new DanmuDecoder().change(
+    append(
+      event('tool/call', {
+        turn: 1,
+        step: 1,
+        name: 'bash',
+        arguments: '{',
+      }),
+    ),
+  );
+
+  expect(result).toEqual([]);
+});
 test('模型重试排期', () => {
   const result = new DanmuDecoder().change(
     append(
