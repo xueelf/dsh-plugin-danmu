@@ -26,9 +26,9 @@ import { CenterAllocator } from './center';
 import { type TextData, Mode } from './decoder';
 import { getFontSize, REFERENCE_SIZE } from './font';
 import { type BandRect, type ConversationBoxStore, bandRect } from './region';
+import type { DanmuSettingsStore } from './settings';
 import type { DanmuSource } from './source';
 import {
-  type MotionTiming,
   DEFAULT_DURATION,
   DEFAULT_TIMING,
   SpaceManager,
@@ -67,39 +67,21 @@ export interface OverlayProps {
   ) => Selected | undefined;
 }
 
-/**
- * B 站网页端的弹幕面板允许观众调整的项，取值即该面板的默认值。
- */
-export interface DanmuOverlayOptions {
-  /** 弹幕速度。B 站网页端的滑杆在默认值 1 两侧覆盖 0.4 到 1.6。 */
-  readonly speedPlus?: number;
-  /** 弹幕字号倍率。B 站网页端的滑杆在默认值 1 两侧覆盖 0.5 到 1.7。 */
-  readonly fontSize?: number;
-  /** 弹幕自带的 `size` 字段，B 站网页端发 25。 */
-  readonly size?: number;
-  /** 随屏缩放，让字号跟随层高变化。默认开启。 */
-  readonly fullScreenSync?: boolean;
-  /** 不透明度。B 站网页端默认 0.8，并把下限钳在 0.1。 */
-  readonly opacity?: number;
-  /** 显示区域，0 到 100。B 站网页端默认 50。 */
-  readonly area?: number;
-  /** 字体族，B 站网页端在 Windows 下的出厂值。 */
-  readonly fontFamily?: string;
-  /** 加粗，B 站网页端默认开启。 */
-  readonly bold?: boolean;
-  /** 描边类型，0 四向 1px 投影，1 三向 0 0 1px，2 混合。 */
-  readonly fontBorder?: number;
-  /** 预览活动区域：为活动区域铺底色，供设置页展示边界。默认关闭。 */
-  readonly preview?: boolean;
-}
-
 const CLASS = 'dsh-danmu-dm';
 /** 默认字体族，B 站网页端在 Windows 下的出厂值。 */
 const DEFAULT_FAMILY = "SimHei, 'Microsoft JhengHei'";
 /** B 站网页端给字体族追加的回落列表。 */
 const FAMILY_FALLBACK = ', Arial, Helvetica, sans-serif';
-/** 预览活动区域时铺的底色，只用于看清边界。 */
-const PREVIEW_FILL = 'rgba(0, 170, 255, 0.1)';
+/** B 站网页端弹幕自带的 `size` 字段。 */
+const SIZE = REFERENCE_SIZE;
+/** 随屏缩放，B 站网页端默认开启。 */
+const FULL_SCREEN_SYNC = true;
+/** B 站网页端在 Windows 下的出厂字体族。 */
+const FAMILY = DEFAULT_FAMILY;
+/** B 站网页端默认加粗。 */
+const BOLD = true;
+/** B 站网页端默认描边类型：四向 1px 投影。 */
+const FONT_BORDER = 0;
 /** 样式表元素上的标记，避免重复注入。 */
 const STYLE_MARK = 'data-dsh-danmu-style';
 /** 复刻 B 站网页端的样式规则。 */
@@ -182,7 +164,7 @@ const DANMU_CSS = `
 }
 `;
 
-function ensureStyles(): void {
+export function ensureDanmuStyles(): void {
   if (
     typeof document === 'undefined' ||
     document.querySelector(`style[${STYLE_MARK}]`) !== null
@@ -213,35 +195,24 @@ function getShadow(color: number, fontBorder: number): string {
       : `1px 0 1px ${hex},0 1px 1px ${hex},0 -1px 1px ${hex},-1px 0 1px ${hex}`;
 }
 
-/** 将描边类型归一化为 B 站网页端支持的 0、1、2 三档。 */
-function borderOf(border: number): number {
-  return border === 1 || border === 2 ? border : 0;
-}
-
 /** 构建 `shell.overlay` 的弹幕组件。 */
 export function createDanmuOverlay(
   React: ReactRuntime,
   source: DanmuSource,
   region: ConversationBoxStore,
-  options: DanmuOverlayOptions = {},
+  settings: DanmuSettingsStore,
 ): (props: OverlayProps) => ReactElement {
-  const timing: MotionTiming = {
-    speedPlus: options.speedPlus ?? DEFAULT_TIMING.speedPlus,
-    defaultDuration: DEFAULT_TIMING.defaultDuration,
-  };
-  const size = options.size ?? REFERENCE_SIZE;
-  const fontSize = options.fontSize ?? 1;
-  const fullScreenSync = options.fullScreenSync ?? true;
-  const area = options.area ?? 50;
-  const opacity = options.opacity ?? 0.8;
-  const family = options.fontFamily ?? DEFAULT_FAMILY;
-  const bold = options.bold ?? true;
-  const fontBorder = borderOf(options.fontBorder ?? 0);
-  const preview = options.preview ?? false;
-
-  ensureStyles();
-
   return function DanmuOverlay(props: OverlayProps): ReactElement {
+    const options = React.useSyncExternalStore(
+      settings.subscribe,
+      settings.getSnapshot,
+    );
+    const optionsRef = React.useRef(options);
+
+    React.useEffect(() => {
+      optionsRef.current = options;
+    }, [options]);
+
     const useSessions = props.useSessions ?? selectNothing;
     const usePanelInfo = props.usePanelInfo ?? selectNothing;
     const covered = usePanelInfo(info => info.activePanelId !== null) === true;
@@ -268,7 +239,10 @@ export function createDanmuOverlay(
     React.useSyncExternalStore(region.subscribe, region.getSnapshot);
 
     if (layoutRef.current === null) {
-      layoutRef.current = new SpaceManager(timing);
+      layoutRef.current = new SpaceManager({
+        speedPlus: options.speedPlus,
+        defaultDuration: DEFAULT_TIMING.defaultDuration,
+      });
     }
 
     if (centerRef.current === null) {
@@ -320,9 +294,12 @@ export function createDanmuOverlay(
         element.remove();
       }
       elementsRef.current.clear();
-      layoutRef.current = new SpaceManager(timing);
+      layoutRef.current = new SpaceManager({
+        speedPlus: optionsRef.current.speedPlus,
+        defaultDuration: DEFAULT_TIMING.defaultDuration,
+      });
       centerRef.current = new CenterAllocator();
-    }, [timing]);
+    }, []);
 
     // 切换会话时，上一会话的弹幕不应继续显示。
     React.useEffect(() => {
@@ -334,15 +311,19 @@ export function createDanmuOverlay(
       }
     }, [band === null, clearRendered]);
     React.useEffect(() => () => clearRendered(), [clearRendered]);
+    // 速度只影响之后发出的弹幕，已渲染的弹幕沿用创建时的时长。
+    React.useEffect(() => {
+      layoutRef.current?.setSpeedPlus(options.speedPlus);
+    }, [options.speedPlus]);
 
     /** 字体的宽度基准，按字体族与字重缓存。 */
     const scaleFor = (container: HTMLElement): SizeScale | null => {
-      const key = `${family}|${bold}`;
+      const key = `${FAMILY}|${BOLD}`;
 
       if (scaleRef.current?.key === key) {
         return scaleRef.current.scale;
       }
-      const scale = measureSizeScale(container, family, bold);
+      const scale = measureSizeScale(container, FAMILY, BOLD);
 
       // 测量失败时不写入缓存，待下一帧容器完成布局或字体就绪后重试。
       if (scale !== null) {
@@ -354,6 +335,8 @@ export function createDanmuOverlay(
       if (textData.mode !== Mode.Roll && textData.mode !== Mode.Top) {
         return;
       }
+      const current = optionsRef.current;
+
       // 布局变化可能移动标记点，但不改变观察者监测的尺寸。
       // 产生弹幕前重新测量可确保读数最新。`refresh` 自带节流，
       // 多数调用不会实际测量。
@@ -374,10 +357,10 @@ export function createDanmuOverlay(
       }
       const now = performance.now() / 1000;
       const fontPx = getFontSize(
-        size,
+        SIZE,
         containerHeight,
-        fontSize,
-        fullScreenSync,
+        current.fontSize,
+        FULL_SCREEN_SYNC,
       );
       const textScale = scaleFor(container);
       const element = document.createElement('div');
@@ -386,12 +369,12 @@ export function createDanmuOverlay(
       element.textContent = textData.text;
       element.style.cssText =
         [
-          `--opacity:${Math.max(opacity, 0.1)}`,
+          `--opacity:${Math.max(current.opacity, 0.1)}`,
           `--fontSize:${fontPx}px`,
-          `--fontFamily:${family}${FAMILY_FALLBACK}`,
-          `--fontWeight:${bold ? 'bold' : 'normal'}`,
+          `--fontFamily:${FAMILY}${FAMILY_FALLBACK}`,
+          `--fontWeight:${BOLD ? 'bold' : 'normal'}`,
           '--color:#ffffff',
-          `--textShadow:${getShadow(0xffffff, fontBorder)}`,
+          `--textShadow:${getShadow(0xffffff, FONT_BORDER)}`,
         ].join(';') + ';';
       container.append(element);
 
@@ -415,7 +398,7 @@ export function createDanmuOverlay(
           height: measured.height,
           now,
           containerHeight,
-          area,
+          area: current.area,
         });
 
         if (y === null) {
@@ -436,7 +419,7 @@ export function createDanmuOverlay(
         now,
         containerWidth,
         containerHeight,
-        area,
+        area: current.area,
       });
 
       if (placement === null) {
@@ -472,33 +455,19 @@ export function createDanmuOverlay(
           pointerEvents: 'none',
         },
       },
-      React.createElement(
-        'div',
-        {
-          ref: containerRef,
-          'data-danmu-container': '',
-          style: {
-            position: 'absolute',
-            left: band === null ? 0 : `${band.left}px`,
-            top: band === null ? 0 : `${band.top}px`,
-            width: band === null ? 0 : `${band.width}px`,
-            height: band === null ? 0 : `${band.height}px`,
-            overflow: 'hidden',
-            pointerEvents: 'none',
-          },
+      React.createElement('div', {
+        ref: containerRef,
+        'data-danmu-container': '',
+        style: {
+          position: 'absolute',
+          left: band === null ? 0 : `${band.left}px`,
+          top: band === null ? 0 : `${band.top}px`,
+          width: band === null ? 0 : `${band.width}px`,
+          height: band === null ? 0 : `${band.height}px`,
+          overflow: 'hidden',
+          pointerEvents: 'none',
         },
-        preview
-          ? React.createElement('div', {
-              'data-danmu-preview': '',
-              style: {
-                position: 'absolute',
-                inset: 0,
-                background: PREVIEW_FILL,
-                pointerEvents: 'none',
-              },
-            })
-          : null,
-      ),
+      }),
     );
   };
 }

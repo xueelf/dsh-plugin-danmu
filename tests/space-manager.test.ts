@@ -43,6 +43,18 @@ test('首条弹幕的运动参数', () => {
   expect(placement?.translateX).toBe(-1201);
   expect(placement?.duration).toBe(8.85);
 });
+test('速度倍率只影响后续弹幕', () => {
+  const allocator = new SpaceManager();
+  const first = allocator.add(request(100, 30, 0));
+
+  expect(first?.duration).toBe(8.85);
+  allocator.setSpeedPlus(2);
+
+  const second = allocator.add(request(100, 30, 0));
+
+  expect(second?.duration).toBeCloseTo(4.43, 2);
+  expect(first?.duration).toBe(8.85);
+});
 test('按实测高度排列', () => {
   const allocator = new SpaceManager();
 

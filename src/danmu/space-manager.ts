@@ -176,10 +176,15 @@ function binsert<Entry extends Placed>(rows: Entry[], row: Entry): void {
  */
 export class SpaceManager {
   private rows: Row[] = [];
-  private readonly timing: MotionTiming;
+  private timing: MotionTiming;
 
   constructor(timing: MotionTiming = DEFAULT_TIMING) {
     this.timing = timing;
+  }
+
+  /** 修改后续弹幕的速度倍率，已放置的弹幕保持原有运动参数。 */
+  setSpeedPlus(speedPlus: number): void {
+    this.timing = { ...this.timing, speedPlus };
   }
 
   /** 给这条弹幕占一行，B 站网页端会丢弃它时返回 `null`。 */

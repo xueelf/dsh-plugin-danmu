@@ -6,9 +6,22 @@
  * 构建时包名保持 external，避免内联第二份 React。
  */
 
-import { type ReactRuntime, createDanmuOverlay } from './danmu/overlay';
+import {
+  type ReactRuntime,
+  createDanmuOverlay,
+  ensureDanmuStyles,
+} from './danmu/overlay';
 import { createRegionProbe } from './danmu/probe';
 import { ConversationBoxStore } from './danmu/region';
+import { createSettingsStore } from './danmu/settings';
+import {
+  createOpenStore,
+  createSettingsButton,
+  createSettingsPanel,
+  ensureSettingsStyles,
+  SETTINGS_LOCALE,
+  SETTINGS_NS,
+} from './danmu/settings-ui';
 import { type SourceContext, createSessionSource } from './danmu/source';
 
 const PACKAGE_NAME = 'dsh-plugin-danmu';
@@ -33,6 +46,10 @@ const OVERLAY_ORDER = -1;
  */
 const CONTENT_TOP_SLOT = 'conversation.session.header.utilities';
 const CONTENT_BOTTOM_SLOT = 'conversation.input.dock';
+/** 输入框左下角的弹幕设置按钮。 */
+const SETTINGS_BUTTON_SLOT = 'conversation.input.left';
+/** 全帧浮层，设置面板按按钮位置固定定位。 */
+const SETTINGS_PANEL_SLOT = 'shell.overlay';
 
 type ModuleRequire = (id: string) => unknown;
 
@@ -68,8 +85,18 @@ interface ClientPlugin {
 }
 
 /** 插件 Client 上下文切片。 */
+interface ClientLocale {
+  register(
+    ns: string,
+    locale: string,
+    dict: Record<string, string>,
+  ): () => void;
+  bind(ns: string): (key: string) => string;
+}
+
 interface ClientContext extends SourceContext {
   effect(callback: () => () => void, label?: string): () => void;
+  locale: ClientLocale;
   slots: {
     inject(key: string, callback: () => () => void): () => void;
     register(
@@ -95,14 +122,46 @@ const definition: ModuleLoaderDefinition = {
       );
     }
     return {
-      inject: ['slots', 'sessions'],
+      inject: ['slots', 'sessions', 'locale'],
       apply(ctx) {
         const region = new ConversationBoxStore();
+        const settings = createSettingsStore();
+        const open = createOpenStore();
+
+        ctx.effect(() => {
+          const zh = ctx.locale.register(SETTINGS_NS, 'zh', SETTINGS_LOCALE.zh);
+          const en = ctx.locale.register(SETTINGS_NS, 'en', SETTINGS_LOCALE.en);
+
+          return () => {
+            zh();
+            en();
+          };
+        }, 'danmu: locale');
+        ctx.effect(() => {
+          document.querySelector('style[data-dsh-danmu-style]')?.remove();
+          document
+            .querySelector('style[data-dsh-danmu-settings-style]')
+            ?.remove();
+          ensureDanmuStyles();
+          ensureSettingsStyles();
+
+          return () => {
+            document.querySelector('style[data-dsh-danmu-style]')?.remove();
+            document
+              .querySelector('style[data-dsh-danmu-settings-style]')
+              ?.remove();
+          };
+        }, 'danmu: styles');
+
+        const t = ctx.locale.bind(SETTINGS_NS);
         const Overlay = createDanmuOverlay(
           React,
           createSessionSource(ctx),
           region,
+          settings,
         );
+        const SettingsButton = createSettingsButton(React, open, t);
+        const SettingsPanel = createSettingsPanel(React, settings, open, t);
         const ContentTopProbe = createRegionProbe(React, region, 'content-top');
         const ContentBottomProbe = createRegionProbe(
           React,
@@ -132,6 +191,18 @@ const definition: ModuleLoaderDefinition = {
           CONTENT_BOTTOM_SLOT,
           `${PACKAGE_NAME}/content-bottom`,
           ContentBottomProbe,
+        );
+        register(
+          SETTINGS_BUTTON_SLOT,
+          `${PACKAGE_NAME}/settings-button`,
+          SettingsButton,
+          10,
+        );
+        register(
+          SETTINGS_PANEL_SLOT,
+          `${PACKAGE_NAME}/settings-panel`,
+          SettingsPanel,
+          10,
         );
         register(OVERLAY_SLOT, PACKAGE_NAME, Overlay, OVERLAY_ORDER);
       },
