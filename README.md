@@ -18,6 +18,10 @@ This project therefore uses danmu as its name, rather than the Japanese romanisa
 
 You can install it from the dsh plugin manager by entering `dsh-plugin-danmu`. Once installed, the plugin appears in the list as Agent Danmu.
 
+DSH manages dependencies through pnpm, and pnpm's [`minimumReleaseAge`](https://pnpm.io/supply-chain-security) policy skips versions that have not been published for the configured age (at most 24 hours), so installing a plugin may download an older version.
+
+To use the latest plugin version immediately, specify the version when installing, for example `dsh-plugin-danmu@^0.1.0`. Alternatively, wait for a while until the new version meets the policy, then install by package name.
+
 ## Usage
 
 Once the plugin is installed and enabled, the active danmu region follows the current session and danmu are emitted automatically when the agent starts producing output.
@@ -30,14 +34,14 @@ To turn it off, disable the plugin in the plugin manager.
 
 ## FAQ
 
-| Question                    | Answer                                                                                                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No danmu appears            | Text only appears while you are talking to the agent. If you see none, it proves the whale is not thinking.                                                             |
-| Some danmu are missing      | When the content area runs out of room, the text is dropped, the same as bilibili                                                                                       |
-| Why are some danmu so long  | bilibili limits each danmu to 100 characters, this project does not. Long lines are split at sentence boundaries, but a single long sentence or a table row stays whole |
-| White text in a light theme | The same style as bilibili, where a black outline keeps it readable                                                                                                     |
-| Does it show emoji          | Yes. bilibili filters emoji from danmu, this project does not                                                                                                           |
-| Can I change speed or size  | Not yet implemented, see the [Roadmap](#roadmap)                                                                                                                        |
+| Question                     | Answer                                                                                                                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No danmu appears             | Text only appears while you are talking to the agent. If you see none, it proves the whale is not thinking.                                                             |
+| Some danmu are missing       | When the content area runs out of room, the text is dropped, the same as bilibili                                                                                       |
+| Why are some danmu so long   | bilibili limits each danmu to 100 characters, this project does not. Long lines are split at sentence boundaries, but a single long sentence or a table row stays whole |
+| White text in a light theme  | The same style as bilibili, where a black outline keeps it readable                                                                                                     |
+| Does it show emoji           | bilibili has filtered emoji from danmu in recent years. This project does not and still shows them.                                                                     |
+| Can I adjust the danmu style | Click the 弹 button at the bottom left of the composer to open the settings panel.                                                                                      |
 
 ## Icon
 
@@ -48,6 +52,7 @@ The "弹" glyph in the icon is taken from [Lolita](https://www.fonts.net.cn/font
 - [x] Scrolling danmu: speed, font size and row assignment match the bilibili web player
 - [x] Top danmu: round, step, retry and compaction notices sit centred at the top of the region
 - [x] emoji: shown as is
-- [ ] Settings panel: speed, font size, opacity and display area
+- [x] Settings panel: global speed, font size, opacity and display area
+- [ ] Settings panel: per-event danmu switches
 - [ ] Coloured danmu: colour by kind or source
 - [ ] Advanced danmu: images and animation
