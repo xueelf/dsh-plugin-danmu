@@ -117,7 +117,8 @@ const SETTINGS_CSS = `
   line-height: 14px;
 }
 .dsh-danmu-settings-panel {
-  --dsh-danmu-accent: var(--dsw-alias-brand-primary-new-colorprimary-new-color, var(--dsw-alias-state-business-primary));
+  /* 与发送按钮启用态同色。发送按钮使用 button-info-fill，空输入时只是 opacity 变淡。 */
+  --dsh-danmu-accent: var(--dsw-alias-button-info-fill);
   position: fixed;
   box-sizing: border-box;
   width: 320px;
@@ -223,7 +224,8 @@ const SETTINGS_CSS = `
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--dsw-alias-label-primary-foreground);
+  /* 与发送按钮图标一致，暗色主题下也是白色。 */
+  background: var(--dsw-static-neutral-bluish-00);
   box-shadow: 0 1px 3px
     color-mix(in srgb, var(--dsw-alias-label-primary) 30%, transparent);
   transform: translate(6px, -50%);
@@ -241,7 +243,7 @@ const SETTINGS_CSS = `
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--dsw-alias-label-primary-foreground);
+  background: var(--dsw-static-neutral-bluish-00);
   transform: translateY(-50%);
 }
 .dsh-danmu-settings-dot,
