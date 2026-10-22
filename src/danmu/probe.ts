@@ -12,10 +12,26 @@ import type { ConversationBoxStore, RegionPart } from './region';
 /** 本模块使用的最小 React 接口。 */
 type ReactRuntime = typeof import('react');
 
-/** 使标记点报告边界且不影响布局的样式。 */
+/**
+ * 标记点自身不占宽高，但作为宿主 flex 列表项会额外占一个 gap。
+ * 宿主 header utilities 的 gap 是 8px，composerStack 的 gap 是 6px，
+ * 用等量负外边距抵消，恢复宿主原本的间距。
+ * content-top 前后都有邻居，水平两侧各抵消一半。
+ * content-bottom 只有后一个邻居，纵向全部由 marginBottom 抵消。
+ */
 export const MARKER_STYLE: Record<RegionPart, CSSProperties> = {
-  'content-top': { width: 0, height: '100%', pointerEvents: 'none' },
-  'content-bottom': { width: '100%', height: 0, pointerEvents: 'none' },
+  'content-top': {
+    width: 0,
+    height: '100%',
+    pointerEvents: 'none',
+    marginInline: -4,
+  },
+  'content-bottom': {
+    width: '100%',
+    height: 0,
+    pointerEvents: 'none',
+    marginBottom: -6,
+  },
 };
 
 /** 为内容区的某一条边界构建标记点组件。 */
