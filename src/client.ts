@@ -1,35 +1,21 @@
 /**
  * `dsh-plugin-danmu` 的 Client 入口。
  *
- * 本文件按裸浏览器脚本加载，不得出现 `import` 与 `export` 语句。
- * React 及共享 Harness 模块通过 `require` 从浏览器模块表取得。
- * 构建时包名保持 external，避免内联第二份 React。
+ * 源码是普通 TS 模块，构建为 CJS 后由 `__ModuleLoader__.load` 的 factory 包裹。
+ * React 和 `react/jsx-runtime` 由页面模块表通过 factory 的 `require` 提供。
  */
 
-import {
-  type ReactRuntime,
-  createDanmuOverlay,
-  ensureDanmuStyles,
-} from './danmu/overlay';
-import { createRegionProbe } from './danmu/probe';
+import { type SourceContext, createSessionSource } from './conversation/source';
 import { ConversationBoxStore } from './danmu/region';
-import { createSettingsStore } from './danmu/settings';
-import {
-  createOpenStore,
-  createSettingsButton,
-  createSettingsPanel,
-  ensureSettingsStyles,
-  SETTINGS_LOCALE,
-  SETTINGS_NS,
-} from './danmu/settings-ui';
-import { type SourceContext, createSessionSource } from './danmu/source';
-import {
-  DANMU_STYLE_MARK,
-  removeStyle,
-  SETTINGS_STYLE_MARK,
-} from './danmu/style';
+import { SETTINGS_LOCALE } from './locales';
+import { createSettingsPanelStore } from './stores/settings-panel-store';
+import { createSettingsStore } from './stores/settings-store';
+import { ensureStyles, removeStyles } from './styles/inject';
+import { createDanmuOverlay } from './ui/DanmuOverlay';
+import { createRegionProbe } from './ui/RegionProbe';
+import { createSettingsButton } from './ui/SettingsButton';
+import { createSettingsPanel } from './ui/SettingsPanel';
 
-const PACKAGE_NAME = 'dsh-plugin-danmu';
 /**
  * 覆盖整帧的浮层，位于所有栏之上与滚动容器之外，
  * 默认点击穿透，入口可自行接管指针事件。
@@ -53,48 +39,15 @@ const CONTENT_TOP_SLOT = 'conversation.session.header.utilities';
 const CONTENT_BOTTOM_SLOT = 'conversation.input.dock';
 /** 输入框左下角的弹幕设置按钮。 */
 const SETTINGS_BUTTON_SLOT = 'conversation.input.left';
-/** 全帧浮层，设置面板按按钮位置固定定位。 */
-const SETTINGS_PANEL_SLOT = 'shell.overlay';
-
-type ModuleRequire = (id: string) => unknown;
-
-/**
- * 校验加载器返回的对象符合浮层使用的 React 接口。
- *
- * `require` 的返回值声明为 unknown，不假定模块表返回的内容。
- * 本 bundle 用到的每个成员均在此处校验。
- */
-function isReactRuntime(value: unknown): value is ReactRuntime {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  return (
-    'createElement' in value &&
-    typeof value.createElement === 'function' &&
-    'useState' in value &&
-    typeof value.useState === 'function' &&
-    'useRef' in value &&
-    typeof value.useRef === 'function' &&
-    'useEffect' in value &&
-    typeof value.useEffect === 'function' &&
-    'useCallback' in value &&
-    typeof value.useCallback === 'function' &&
-    'useSyncExternalStore' in value &&
-    typeof value.useSyncExternalStore === 'function'
-  );
-}
-
-interface ClientPlugin {
-  inject: string[];
-  apply(ctx: ClientContext): void;
-}
 
 /** 插件 Client 上下文切片。 */
 interface ClientLocale {
   register(
     ns: string,
-    locale: string,
-    dict: Record<string, string>,
+    messages: {
+      readonly en: Record<string, string>;
+      readonly zh: Record<string, string>;
+    },
   ): () => void;
   bind(ns: string): (key: string) => string;
 }
@@ -111,104 +64,69 @@ interface ClientContext extends SourceContext {
   };
 }
 
-const moduleLoader = window.__ModuleLoader__;
+export const inject = ['slots', 'sessions', 'locale'];
 
-if (moduleLoader === undefined) {
-  throw new Error(`${PACKAGE_NAME}: the Web module loader is unavailable`);
+export function apply(ctx: ClientContext): void {
+  const region = new ConversationBoxStore();
+  const settings = createSettingsStore();
+  const open = createSettingsPanelStore();
+
+  ctx.effect(
+    () => ctx.locale.register(__PACKAGE_NAME__, SETTINGS_LOCALE),
+    'danmu: locale',
+  );
+  ctx.effect(() => {
+    removeStyles();
+    ensureStyles();
+
+    return removeStyles;
+  }, 'danmu: styles');
+
+  const t = ctx.locale.bind(__PACKAGE_NAME__);
+  const Overlay = createDanmuOverlay(
+    createSessionSource(ctx),
+    region,
+    settings,
+  );
+  const SettingsButton = createSettingsButton(open, t);
+  const SettingsPanel = createSettingsPanel(settings, open, t);
+  const ContentTopProbe = createRegionProbe(region, 'content-top');
+  const ContentBottomProbe = createRegionProbe(region, 'content-bottom');
+  const register = (
+    slot: string,
+    id: string,
+    component: unknown,
+    order?: number,
+  ): (() => void) =>
+    ctx.effect(
+      () =>
+        ctx.slots.inject(slot, () =>
+          ctx.slots.register({ name: slot, id, order }, component),
+        ),
+      `danmu: ${slot}`,
+    );
+
+  register(
+    CONTENT_TOP_SLOT,
+    `${__PACKAGE_NAME__}/content-top`,
+    ContentTopProbe,
+  );
+  register(
+    CONTENT_BOTTOM_SLOT,
+    `${__PACKAGE_NAME__}/content-bottom`,
+    ContentBottomProbe,
+  );
+  register(
+    SETTINGS_BUTTON_SLOT,
+    `${__PACKAGE_NAME__}/settings-button`,
+    SettingsButton,
+    10,
+  );
+  register(
+    OVERLAY_SLOT,
+    `${__PACKAGE_NAME__}/settings-panel`,
+    SettingsPanel,
+    10,
+  );
+  register(OVERLAY_SLOT, __PACKAGE_NAME__, Overlay, OVERLAY_ORDER);
 }
-const definition: ModuleLoaderDefinition = {
-  id: PACKAGE_NAME,
-  factory(require: ModuleRequire): ClientPlugin {
-    const React = require('react');
-
-    if (!isReactRuntime(React)) {
-      throw new Error(
-        `${PACKAGE_NAME}: the module loader did not provide react`,
-      );
-    }
-    return {
-      inject: ['slots', 'sessions', 'locale'],
-      apply(ctx) {
-        const region = new ConversationBoxStore();
-        const settings = createSettingsStore();
-        const open = createOpenStore();
-
-        ctx.effect(() => {
-          const zh = ctx.locale.register(SETTINGS_NS, 'zh', SETTINGS_LOCALE.zh);
-          const en = ctx.locale.register(SETTINGS_NS, 'en', SETTINGS_LOCALE.en);
-
-          return () => {
-            zh();
-            en();
-          };
-        }, 'danmu: locale');
-        ctx.effect(() => {
-          removeStyle(DANMU_STYLE_MARK);
-          removeStyle(SETTINGS_STYLE_MARK);
-          ensureDanmuStyles();
-          ensureSettingsStyles();
-
-          return () => {
-            removeStyle(DANMU_STYLE_MARK);
-            removeStyle(SETTINGS_STYLE_MARK);
-          };
-        }, 'danmu: styles');
-
-        const t = ctx.locale.bind(SETTINGS_NS);
-        const Overlay = createDanmuOverlay(
-          React,
-          createSessionSource(ctx),
-          region,
-          settings,
-        );
-        const SettingsButton = createSettingsButton(React, open, t);
-        const SettingsPanel = createSettingsPanel(React, settings, open, t);
-        const ContentTopProbe = createRegionProbe(React, region, 'content-top');
-        const ContentBottomProbe = createRegionProbe(
-          React,
-          region,
-          'content-bottom',
-        );
-        const register = (
-          slot: string,
-          id: string,
-          component: unknown,
-          order?: number,
-        ): (() => void) =>
-          ctx.effect(
-            () =>
-              ctx.slots.inject(slot, () =>
-                ctx.slots.register({ name: slot, id, order }, component),
-              ),
-            `danmu: ${slot}`,
-          );
-
-        register(
-          CONTENT_TOP_SLOT,
-          `${PACKAGE_NAME}/content-top`,
-          ContentTopProbe,
-        );
-        register(
-          CONTENT_BOTTOM_SLOT,
-          `${PACKAGE_NAME}/content-bottom`,
-          ContentBottomProbe,
-        );
-        register(
-          SETTINGS_BUTTON_SLOT,
-          `${PACKAGE_NAME}/settings-button`,
-          SettingsButton,
-          10,
-        );
-        register(
-          SETTINGS_PANEL_SLOT,
-          `${PACKAGE_NAME}/settings-panel`,
-          SettingsPanel,
-          10,
-        );
-        register(OVERLAY_SLOT, PACKAGE_NAME, Overlay, OVERLAY_ORDER);
-      },
-    };
-  },
-};
-
-moduleLoader.load(definition);
