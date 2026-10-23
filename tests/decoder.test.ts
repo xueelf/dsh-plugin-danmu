@@ -2,10 +2,54 @@ import { expect, test } from 'bun:test';
 import {
   type SessionChangeLike,
   type SessionEntryLike,
-  DanmuDecoder,
+  type TextData,
+  applyCommittedEvent,
+  INITIAL_DANMU_STATE,
   Mode,
-} from '#/danmu/decoder';
+} from '#/conversation/decoder';
+import { LiveDanmuDecoder } from '#/conversation/live';
 
+class DanmuDecoder {
+  private state = INITIAL_DANMU_STATE;
+  private readonly live = new LiveDanmuDecoder();
+
+  change(change: SessionChangeLike): TextData[] {
+    if (change.kind === 'replace') {
+      this.state = INITIAL_DANMU_STATE;
+      this.live.reset();
+
+      return [];
+    }
+
+    if (change.kind !== 'append') {
+      return [];
+    }
+    const released: TextData[] = [];
+
+    for (const entry of change.entries) {
+      if (entry.type === 'transient') {
+        released.push(
+          ...this.live.change({ kind: 'append', entries: [entry] }),
+        );
+
+        continue;
+      }
+      const before = this.state.entries.length;
+
+      this.state = applyCommittedEvent(this.state, entry.event);
+      released.push(...this.state.entries.slice(before));
+
+      if (entry.event.type === 'turn/end' || entry.event.type === 'step/end') {
+        released.push(...this.live.flush());
+      }
+    }
+    return released;
+  }
+
+  flush(): TextData[] {
+    return this.live.flush();
+  }
+}
 const event = (
   type: string,
   data: unknown,
@@ -361,7 +405,9 @@ test('重试缺少次数', () => {
 });
 test('推理增量', () => {
   const result = new DanmuDecoder().change(
-    append(live({ type: 'reasoning-delta', index: 0, text: 'Alpha. Beta.\n' })),
+    append(
+      live({ type: 'reasoning-delta', index: 0, text: 'Alpha. Beta.\n\n' }),
+    ),
   );
 
   expect(result.map(entry => entry.text)).toEqual(['Alpha. Beta.']);
