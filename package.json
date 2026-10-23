@@ -3,12 +3,14 @@
   "version": "0.2.0",
   "description": "Live danmu overlays for DeepSeek Harness (dsh) that visualize agent activity and status, such as reasoning, tool calls, and task progress.",
   "keywords": [
-    "dsh",
-    "deepseek-harness",
-    "plugin",
-    "danmu",
+    "bilibili",
+    "cordis",
     "danmaku",
-    "bilibili"
+    "danmu",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "plugin"
   ],
   "homepage": "https://github.com/xueelf/dsh-plugin-danmu#readme",
   "bugs": {
