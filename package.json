@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-danmu",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Live danmu overlays for DeepSeek Harness (dsh) that visualize agent activity and status, such as reasoning, tool calls, and task progress.",
   "keywords": [
     "dsh",
