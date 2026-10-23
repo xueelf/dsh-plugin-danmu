@@ -1,0 +1,77 @@
+/* 类名必须与 src/danmu/overlay.ts 的 DANMU_CLASS 一致。 */
+.dsh-danmu {
+  position: absolute;
+  line-height: 1.125;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  white-space: pre;
+  -webkit-perspective: 500px;
+  perspective: 500px;
+  will-change: transform, opacity, top, left;
+  font-weight: bold;
+  font-weight: var(--fontWeight, bold);
+  font-family: var(--fontFamily);
+  font-size: 25px;
+  font-size: var(--fontSize, 25px);
+  color: #ffffff;
+  color: var(--color, #ffffff);
+  text-shadow: var(--textShadow);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  top: 0;
+  top: var(--top, 0);
+  opacity: 0;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  left: -10px;
+  left: var(--offset, -10px);
+  z-index: 200;
+  z-index: var(--zIndex, 200);
+  display: var(--display, flex);
+}
+.dsh-danmu.dsh-danmu-show {
+  opacity: 1;
+  opacity: var(--opacity, 1);
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+}
+.dsh-danmu.dsh-danmu-show.dsh-danmu-roll {
+  -webkit-animation: dsh-danmu-roll linear var(--duration) forwards;
+  animation: dsh-danmu-roll linear var(--duration) forwards;
+}
+.dsh-danmu.dsh-danmu-center {
+  top: 0;
+  left: 50%;
+  -webkit-transform: translate(-50%, 0);
+  transform: translate(-50%, 0);
+  -webkit-transform: translate(-50%, var(--translateY, 0));
+  transform: translate(-50%, var(--translateY, 0));
+}
+@-webkit-keyframes dsh-danmu-roll {
+  0% {
+    -webkit-transform: translateX(0) translateZ(0);
+    transform: translateX(0) translateZ(0);
+  }
+  100% {
+    -webkit-transform: translateX(var(--translateX)) translateZ(0);
+    transform: translateX(var(--translateX)) translateZ(0);
+  }
+}
+@keyframes dsh-danmu-roll {
+  0% {
+    -webkit-transform: translateX(0) translateZ(0);
+    transform: translateX(0) translateZ(0);
+  }
+  100% {
+    -webkit-transform: translateX(var(--translateX)) translateZ(0);
+    transform: translateX(var(--translateX)) translateZ(0);
+  }
+}
