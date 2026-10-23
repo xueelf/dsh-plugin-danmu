@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import packageJson from '~/package.json';
+import { dsh, files, name, exports as packageExports } from '~/package.json';
 
 const root = join(import.meta.dir, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -35,9 +35,9 @@ const SOURCE_ARTIFACTS = [
 ];
 
 test('bundle 补丁声明', () => {
-  const patch = read(packageJson.dsh.bundle.patch);
+  const patch = read(dsh.bundle.patch);
 
-  expect(patch).toContain(`name: ${packageJson.name}`);
+  expect(patch).toContain(`name: ${name}`);
 });
 test('源文件清单', () => {
   for (const path of SOURCE_ARTIFACTS) {
@@ -51,14 +51,14 @@ test('发布文件清单', () => {
     'locale/*.json',
     'icon.svg',
   ]) {
-    expect(packageJson.files).toContain(entry);
+    expect(files).toContain(entry);
   }
 });
 test('运行时入口与展示资源', () => {
-  expect(packageJson.exports['.']).toBeDefined();
-  expect(packageJson.exports['./client']).toBeDefined();
-  expect(packageJson.exports['./icon']).toBe('./icon.svg');
-  expect(packageJson.dsh.client.platform).toBe('web');
+  expect(packageExports['.']).toBeDefined();
+  expect(packageExports['./client']).toBeDefined();
+  expect(packageExports['./icon']).toBe('./icon.svg');
+  expect(dsh.client.platform).toBe('web');
 });
 test('图标画布', () => {
   const icon = read('icon.svg');

@@ -21,11 +21,6 @@
   "license": "MIT",
   "author": "Yuki <admin@yuki.sh>",
   "type": "module",
-  "imports": {
-    "#/*": {
-      "types": "./dist/*.d.ts"
-    }
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -47,13 +42,16 @@
   ],
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "format": "prettier \"**/*.{json,md,ts,yaml,yml}\" --write --experimental-cli",
-    "format:check": "prettier \"**/*.{json,md,ts,yaml,yml}\" --check --experimental-cli",
+    "format": "prettier \"**/*.{css,json,md,ts,tsx,yaml,yml}\" --write --experimental-cli",
+    "format:check": "prettier \"**/*.{css,json,md,ts,tsx,yaml,yml}\" --check --experimental-cli",
     "lint": "eslint --cache",
     "lint:fix": "eslint --fix --cache",
     "prepack": "bun run build",
     "prepare": "husky",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",
@@ -89,7 +87,14 @@
     },
     "client": {
       "platform": "web",
-      "immediately": true
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-api-session-controller"
+      ]
     }
   }
 }

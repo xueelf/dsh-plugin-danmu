@@ -1,7 +1,8 @@
 import { $, build, file, Glob } from 'bun';
-import { copyFile, mkdir, rm } from 'node:fs/promises';
+import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Journal, LevelDebug } from 'annal';
+import { name } from '~/package.json';
 import { compilerOptions } from '~/tsconfig.json';
 
 const logger = new Journal({ scope: 'build', level: LevelDebug });
@@ -21,26 +22,50 @@ await build({
   target: 'node',
 });
 /**
- * Client 入口由 Web 模块加载器直接执行，
- * 以浏览器为目标构建，只有页面提供的 React 保持 external，
- * 其余依赖内联进产物。
+ * Client 产物是 lazy CJS factory。
+ * Bun 输出 CJS，React 和 react/jsx-runtime 保持 external，
+ * 再把整个 bundle 包进 __ModuleLoader__.load 的 factory。
  */
 await build({
   entrypoints: ['src/client.ts'],
-  external: ['react', 'react-dom', 'react/jsx-runtime'],
-  format: 'esm',
+  external: ['react', 'react/jsx-runtime'],
+  format: 'cjs',
   outdir: compilerOptions.outDir,
   target: 'browser',
+  jsx: {
+    runtime: 'automatic',
+    development: false,
+  },
+  loader: {
+    '.css': 'text',
+  },
+  define: {
+    __PACKAGE_NAME__: JSON.stringify(name),
+  },
 });
 logger.info('JavaScript bundles generated');
 
+const clientPath = join(compilerOptions.outDir, 'client.js');
+const clientBundle = await file(clientPath).text();
+const clientArtifact = `window.__ModuleLoader__.load({
+  id: ${JSON.stringify(name)},
+  factory: (require) => {
+    var module = { exports: {} };
+    var exports = module.exports;
+${clientBundle}
+    return module.exports;
+  },
+});
+`;
+
+await writeFile(clientPath, clientArtifact);
+new Bun.Transpiler({ loader: 'js' }).transformSync(clientArtifact);
+logger.info('Client artifact syntax verified');
+
 /**
  * 页面会原样执行 Client 产物，只要残留 `import` 或 `export` 语句，
- * 或者产物中包含 React，插件在加载时就会失败，而且不会给出明显提示。
+ * 或者产物不是 factory 包裹的 CJS，插件在加载时就会失败。
  */
-const clientArtifact = await file(
-  join(compilerOptions.outDir, 'client.js'),
-).text();
 const moduleSyntax = clientArtifact
   .split('\n')
   .filter(line => /^\s*(?:import|export)\s/u.test(line));
