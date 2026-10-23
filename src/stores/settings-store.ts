@@ -29,7 +29,10 @@ export const DEFAULT_SETTINGS: DanmuSettings = {
   area: 50,
 };
 
-/** 设置保存在本机浏览器里，不进入 profile 或会话记录。 */
+/**
+ * 设置保存在本机浏览器里，不进入 profile 或会话记录。
+ * key 故意固定，不跟随包名，改名后仍保留同一份用户设置。
+ */
 export const SETTINGS_STORAGE_KEY = 'dsh-plugin-danmu:settings';
 
 /** 只用到读取和写入的存储接口，便于测试替换。 */
@@ -98,48 +101,27 @@ export function normaliseSettings(value: unknown): DanmuSettings {
   };
 }
 
-function loadSettings(storage: SettingsStorage | null): DanmuSettings {
-  if (storage === null) {
+function loadSettings(storage: SettingsStorage): DanmuSettings {
+  const raw = storage.getItem(SETTINGS_STORAGE_KEY);
+
+  if (raw === null) {
     return { ...DEFAULT_SETTINGS };
   }
 
   try {
-    const raw = storage.getItem(SETTINGS_STORAGE_KEY);
-
-    return raw === null
-      ? { ...DEFAULT_SETTINGS }
-      : normaliseSettings(JSON.parse(raw));
+    return normaliseSettings(JSON.parse(raw));
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
 }
 
-function saveSettings(
-  storage: SettingsStorage | null,
-  settings: DanmuSettings,
-): void {
-  if (storage === null) {
-    return;
-  }
-
-  try {
-    storage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  } catch {
-    // 隐私模式或配额不足时保留内存中的设置即可。
-  }
-}
-
-function resolveStorage(): SettingsStorage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
-  }
+function saveSettings(storage: SettingsStorage, settings: DanmuSettings): void {
+  storage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 }
 
 /** 创建设置存储，默认读写本机 `localStorage`。 */
 export function createSettingsStore(
-  storage: SettingsStorage | null = resolveStorage(),
+  storage: SettingsStorage = localStorage,
 ): DanmuSettingsStore {
   let current = loadSettings(storage);
 

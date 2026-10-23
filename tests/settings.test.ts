@@ -5,7 +5,7 @@ import {
   normaliseSettings,
   SETTINGS_STORAGE_KEY,
   SPEED_STEPS,
-} from '#/danmu/settings';
+} from '#/stores/settings-store';
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();

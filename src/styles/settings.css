@@ -1,0 +1,183 @@
+.dsh-danmu-settings-button {
+  appearance: none;
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  background: 0 0;
+  border: 0;
+  outline: none;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  display: inline-flex;
+  position: relative;
+}
+.dsh-danmu-settings-button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.dsh-danmu-settings-glyph {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 14px;
+}
+.dsh-danmu-settings-panel {
+  /* 与发送按钮启用态同色。发送按钮使用 button-info-fill，空输入时只是 opacity 变淡。 */
+  --dsh-danmu-accent: var(--dsw-alias-button-info-fill);
+  position: fixed;
+  box-sizing: border-box;
+  width: 320px;
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  z-index: 1100;
+  pointer-events: auto;
+  padding: 12px 20px;
+  border: 0;
+  outline: none;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-specific-menu);
+  backdrop-filter: var(--dsw-menu-backdrop-filter);
+  -webkit-backdrop-filter: var(--dsw-menu-backdrop-filter);
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
+  box-shadow: var(--dsw-elevation-prominent);
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 20px;
+}
+.dsh-danmu-settings-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 16px;
+  margin-bottom: 16px;
+}
+.dsh-danmu-settings-label {
+  flex: 0 1 61px;
+  min-width: 0;
+  width: 61px;
+  height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  white-space: nowrap;
+}
+.dsh-danmu-settings-area {
+  display: flex;
+  align-items: center;
+  flex: 1 1 100%;
+  min-width: 0;
+  height: 16px;
+  margin-left: 10px;
+}
+.dsh-danmu-settings-value {
+  /* B 站数值列固定 60 基宽并允许收缩，四条轨道等长。 */
+  flex: 0 1 60px;
+  min-width: 0;
+  box-sizing: border-box;
+  width: 60px;
+  height: 16px;
+  padding-left: 20px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.dsh-danmu-settings-track {
+  position: relative;
+  /* B 站 .bui-progress-wrap 是 width:100%，和数值列一起收缩。 */
+  flex: 1 1 100%;
+  min-width: 0;
+  height: 12px;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.dsh-danmu-settings-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 6px;
+  border-radius: 6px;
+  background: var(--dsw-alias-border-l3);
+  transform: translateY(-50%);
+}
+.dsh-danmu-settings-track:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid
+    var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.dsh-danmu-settings-bar {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 6px;
+  border-radius: 6px;
+  background: var(--dsh-danmu-accent);
+  transform: translateY(-50%);
+}
+.dsh-danmu-settings-dot {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  /* 与发送按钮图标一致，暗色主题下也是白色。 */
+  background: var(--dsw-static-neutral-bluish-00);
+  box-shadow: 0 1px 3px
+    color-mix(in srgb, var(--dsw-alias-label-primary) 30%, transparent);
+  transform: translate(6px, -50%);
+}
+.dsh-danmu-settings-steps {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 0;
+}
+.dsh-danmu-settings-step {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--dsw-static-neutral-bluish-00);
+  transform: translateY(-50%);
+}
+.dsh-danmu-settings-dot,
+.dsh-danmu-settings-step {
+  /* 宿主全局 corner-shape 是 superellipse，正圆必须显式 round。 */
+  corner-shape: round;
+}
+.dsh-danmu-settings-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 116px;
+  height: 22px;
+  margin-top: 9px;
+  padding: 0 3px;
+  border: 1px solid var(--dsw-alias-border-l4);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+}
+.dsh-danmu-settings-reset:hover {
+  border-color: var(--dsh-danmu-accent);
+  color: var(--dsh-danmu-accent);
+}
+.dsh-danmu-settings-reset:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid
+    var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary));
+  outline-offset: -1px;
+}
