@@ -11,10 +11,7 @@ import settingsCss from './settings.css';
 const DANMU_STYLE_MARK = 'data-dsh-danmu-style';
 const SETTINGS_STYLE_MARK = 'data-dsh-danmu-settings-style';
 
-function ensureStyle(mark: string, css: string): void {
-  if (document.querySelector(`style[${mark}]`) !== null) {
-    return;
-  }
+function injectStyle(mark: string, css: string): void {
   const style = document.createElement('style');
 
   style.setAttribute(mark, '');
@@ -27,9 +24,9 @@ function removeStyle(mark: string): void {
 }
 
 /** 注入弹幕和设置面板样式。 */
-export function ensureStyles(): void {
-  ensureStyle(DANMU_STYLE_MARK, danmuCss);
-  ensureStyle(SETTINGS_STYLE_MARK, settingsCss);
+export function injectStyles(): void {
+  injectStyle(DANMU_STYLE_MARK, danmuCss);
+  injectStyle(SETTINGS_STYLE_MARK, settingsCss);
 }
 
 /** 移除弹幕和设置面板样式。 */

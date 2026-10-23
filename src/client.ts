@@ -10,7 +10,7 @@ import { ConversationBoxStore } from './danmu/region';
 import { SETTINGS_LOCALE } from './locales';
 import { createSettingsPanelStore } from './stores/settings-panel-store';
 import { createSettingsStore } from './stores/settings-store';
-import { ensureStyles, removeStyles } from './styles/inject';
+import { injectStyles, removeStyles } from './styles/inject';
 import { createDanmuOverlay } from './ui/DanmuOverlay';
 import { createRegionProbe } from './ui/RegionProbe';
 import { createSettingsButton } from './ui/SettingsButton';
@@ -77,7 +77,7 @@ export function apply(ctx: ClientContext): void {
   );
   ctx.effect(() => {
     removeStyles();
-    ensureStyles();
+    injectStyles();
 
     return removeStyles;
   }, 'danmu: styles');
