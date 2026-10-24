@@ -65,6 +65,7 @@ export function createDanmuOverlay(
     const containerRef = useRef<HTMLDivElement | null>(null);
     const engineRef = useRef<DanmuOverlayEngine | null>(null);
     const lastBandRef = useRef<BandRect | null>(null);
+    const sizeRef = useRef({ width: 0, height: 0 });
     const [layer, setLayer] = useState({
       width: 0,
       height: 0,
@@ -86,7 +87,15 @@ export function createDanmuOverlay(
     }, [measuredBand]);
 
     const band = measuredBand ?? lastBandRef.current;
+    const bandWidth = band === null ? 0 : band.width;
+    const bandHeight = band === null ? 0 : band.height;
 
+    // 引擎只读尺寸快照，对应 B 站的 `manager.containerSize`。快照由标记点
+    // 推断，不是宿主矩形，未覆盖的布局变化可能保持旧值，限制见 region.ts。
+    useLayoutEffect(() => {
+      sizeRef.current = { width: bandWidth, height: bandHeight };
+      engineRef.current?.setContainerSize(bandWidth, bandHeight);
+    }, [bandWidth, bandHeight]);
     useEffect(() => {
       optionsRef.current = options;
       engineRef.current?.setOptions(options);
@@ -128,19 +137,16 @@ export function createDanmuOverlay(
       if (container === null) {
         return undefined;
       }
-      const engine = new DanmuOverlayEngine(
-        container,
-        region,
-        optionsRef.current,
-      );
+      const engine = new DanmuOverlayEngine(container, optionsRef.current);
 
+      engine.setContainerSize(sizeRef.current.width, sizeRef.current.height);
       engineRef.current = engine;
 
       return () => {
         engine.destroy();
         engineRef.current = null;
       };
-    }, [region]);
+    }, []);
 
     const clearRendered = useCallback(() => {
       engineRef.current?.clear();

@@ -36,7 +36,12 @@ function readFlexGap(
   return null;
 }
 
-/** 为内容区的某一条边界构建标记点组件。 */
+/**
+ * 为内容区边界构建标记点。
+ *
+ * 区域由两个标记点推断，属 DSH 适配层。宿主不提供内容区矩形，
+ * 已知限制见 `region.ts`。
+ */
 export function createRegionProbe(
   store: ConversationBoxStore,
   part: RegionPart,

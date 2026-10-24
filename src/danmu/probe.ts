@@ -1,8 +1,9 @@
 /**
- * 标记点的 gap 补偿计算。
+ * 标记点的 gap 补偿。
  *
- * DOM 读取和标记点组件在 `ui/RegionProbe.tsx`。
- * 这里只保留纯函数，便于回归测试。
+ * 标记点作为额外 flex 子项会占一个 gap，按主轴方向用 -gap/2 抵消。
+ * B 站播放器没有该标记点。纯函数留在本文件，DOM 读取在
+ * `ui/RegionProbe.tsx`。
  */
 
 import type { CSSProperties } from 'react';

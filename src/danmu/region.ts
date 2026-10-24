@@ -21,7 +21,14 @@
  * 会话栏之前所有祖先 `bottom` 的最大值。这里不需要高度或宽度阈值。
  *
  * 长度测量使用 `ResizeObserver` 与 `getBoundingClientRect`，
- * 与 `dsh-client-ui-layout` 和 `dsh-client-ui-conversation` 的测量方式一致。
+ * 与 `dsh-client-ui-layout`、`dsh-client-ui-conversation` 的测量方式一致。
+ *
+ * 该区域是 DSH 适配层，不是 B 站弹幕规则。B 站播放器由宿主调用
+ * `manager.resize` 下发 `containerSize`（来源：npd.491），DSH 不提供
+ * 内容区矩形，只能由两个标记点推断。
+ *
+ * `ResizeObserver` 不感知位移，未观察祖先的纯位移会让区域保持旧值
+ * 到下一次触发。这是缺失矩形 API 的已知限制，不以插入时测量或轮询弥补。
  */
 
 /** 两个测量标记点，分别提供内容区上边界与栏的横向范围。 */
@@ -210,15 +217,17 @@ function sameRegion(
 }
 
 /**
- * 跟踪两个标记点，并发布计算出的内容区。
+ * 跟踪两个标记点，发布计算出的内容区。
  *
- * 标记点可能因布局变化而移动，但其自身尺寸不变，例如输入框在标记点下方增高。
- * `refresh` 用于声明布局可能已变化，浮层在产生弹幕前调用，以获取最新读数。
+ * 标记点及其父元素共用一个 `ResizeObserver`，接元素尺寸变化；一条
+ * `resize` 监听接只改位置、不改已观察元素尺寸的窗口级变化。
+ * 弹幕引擎只读该区域，插入时不触发测量。区域是推断值，限制见文件头。
  */
 export class ConversationBoxStore {
   private readonly elements = new Map<RegionPart, HTMLElement>();
-  private readonly stopObserving = new Map<RegionPart, () => void>();
   private readonly listeners = new Set<() => void>();
+  private observer: ResizeObserver | null = null;
+  private listening = false;
   private region: ConversationBox | null = null;
   private version = 0;
 
@@ -227,37 +236,64 @@ export class ConversationBoxStore {
     if (this.elements.get(part) === element) {
       return;
     }
-    this.stopObserving.get(part)?.();
-    this.stopObserving.delete(part);
     this.elements.delete(part);
 
-    if (element === null) {
-      this.update();
+    if (element !== null) {
+      this.elements.set(part, element);
+    }
+    this.syncObservation();
+    this.update();
+  }
+
+  /**
+   * 合并观察目标。
+   *
+   * 原实现每个标记点各建一个 `ResizeObserver` 和一条 `resize` 监听，
+   * 一次窗口变化最多完整测量四次。合并后减半，时机和结果不变。
+   */
+  private syncObservation(): void {
+    const elements = [...this.elements.values()];
+
+    this.observer?.disconnect();
+    this.observer = null;
+
+    if (elements.length === 0) {
+      this.removeResizeListener();
 
       return;
     }
-    this.elements.set(part, element);
+    const observer = new ResizeObserver(() => this.update());
 
-    const measure = () => this.update();
-    const observer = new ResizeObserver(measure);
+    for (const element of elements) {
+      observer.observe(element);
 
-    observer.observe(element);
-
-    if (element.parentElement !== null) {
-      observer.observe(element.parentElement);
+      if (element.parentElement !== null) {
+        observer.observe(element.parentElement);
+      }
     }
-    window.addEventListener('resize', measure);
-    this.stopObserving.set(part, () => {
-      observer.disconnect();
-      window.removeEventListener('resize', measure);
-    });
-    this.update();
+    this.observer = observer;
+    this.addResizeListener();
   }
 
-  /** 重新测量两个标记点，取最新的会话栏和头部边界。 */
-  refresh(): void {
-    this.update();
+  private addResizeListener(): void {
+    if (this.listening) {
+      return;
+    }
+    window.addEventListener('resize', this.onResize);
+    this.listening = true;
   }
+
+  private removeResizeListener(): void {
+    if (!this.listening) {
+      return;
+    }
+    window.removeEventListener('resize', this.onResize);
+    this.listening = false;
+  }
+
+  private readonly onResize = (): void => {
+    this.update();
+  };
 
   /**
    * 返回内容区，Conversation 未显示时返回 `null`。
