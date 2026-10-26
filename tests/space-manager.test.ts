@@ -63,7 +63,7 @@ test('按实测高度排列', () => {
   expect(allocator.add(request(100, 30, 0))?.y).toBe(OFFSET_TOP + 62);
 });
 test('显示区域限制排列高度', () => {
-  // 层高 500、显示区域 50 时可用高度为 250.5，两行 100px 放得下，第三行放不下。
+  // 容器高 500，轨道层高 501，显示区域 50 时可用高度为 250.5，两行 100px 放得下，第三行放不下。
   const allocator = new SpaceManager();
   const overrides = { containerWidth: 500, containerHeight: 500 };
 
@@ -75,12 +75,28 @@ test('显示区域限制排列高度', () => {
 });
 test('空层放置超高弹幕', () => {
   /**
-   * 轨道列表为空时，add() 先返回顶部槽位，再检查上限，
-   * 所以过高的首条弹幕仍会被放置并裁切。
+   * 轨道列表为空时，add() 直接返回顶部槽位，不检查高度上限，
+   * 与 B 站 `if (!k)` 一致，所以过高的首条弹幕仍会被放置并裁切。
    */
   expect(
     new SpaceManager().add(request(100, 30, 0, { containerHeight: 20 }))?.y,
   ).toBe(OFFSET_TOP);
+});
+test('高矮弹幕混合时跳过已让位的行', () => {
+  const allocator = new SpaceManager();
+  const base: PlacementRequest = {
+    width: 100,
+    height: 30,
+    now: 0,
+    containerWidth: 500,
+    containerHeight: 500,
+    area: 0,
+  };
+
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 31);
+  // 前两条已让出横向位置，80px 高的新弹幕可以回到顶部。
+  expect(allocator.add({ ...base, height: 80, now: 2 })?.y).toBe(OFFSET_TOP);
 });
 test('追不上时共用轨道', () => {
   const allocator = new SpaceManager();
@@ -116,4 +132,30 @@ test('释放的顶部轨道只复用一次', () => {
   expect(allocator.add({ ...base, width: 100, now: 11.6 })?.y).toBeGreaterThan(
     OFFSET_TOP,
   );
+});
+test('显示区域为 0 时启用三层重叠', () => {
+  const allocator = new SpaceManager();
+  const base: PlacementRequest = {
+    width: 100,
+    height: 100,
+    now: 0,
+    containerWidth: 500,
+    containerHeight: 500,
+    area: 0,
+  };
+
+  // 每层放四条，第五条从第二层的顶部重新开始。
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 101);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 202);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 303);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 101);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 202);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 303);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 101);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 202);
+  expect(allocator.add(base)?.y).toBe(OFFSET_TOP + 303);
+  expect(allocator.add(base)).toBeNull();
 });

@@ -50,6 +50,9 @@ export const OFFSET_TOP = 4;
 /** B 站网页端的重叠余量，秒，见 `A = floor(duration * (1 - density) / 2) + 0.1`。 */
 const OVERLAP_SLACK = 0.1;
 
+/** B 站碰撞池最多三层，只在显示区域为 0 时启用。来源：npd.491 的 `for (b=0;b<3;)`。 */
+export const LAYER_LIMIT = 3;
+
 export interface MotionTiming {
   /** 弹幕速度设置，B 站网页端的滑杆在 1 两侧覆盖 0.4 到 1.6。 */
   readonly speedPlus: number;
@@ -138,7 +141,7 @@ export function tz(
     bounds.min +
     (bounds.max - bounds.min) / (1 + Math.exp(-0.2 * (ratio - pivot)));
 
-  return duration || defaultDuration;
+  return duration;
 }
 
 /** 容器宽度落在分段表的哪一档。 */
@@ -175,7 +178,7 @@ function binsert<Entry extends Placed>(rows: Entry[], row: Entry): void {
  * 实例保存当前已占用的行，后续放置据此判断空闲轨道。该状态有意设计为可变。
  */
 export class SpaceManager {
-  private rows: Row[] = [];
+  private rows: Array<Row[] | undefined> = [];
   private timing: MotionTiming;
 
   constructor(timing: MotionTiming = DEFAULT_TIMING) {
@@ -205,33 +208,91 @@ export class SpaceManager {
     const endTime = now + duration;
 
     // 已离开该层的条目不再占用轨道。
-    this.rows = this.rows.filter(row => row.endTime > now);
+    this.prune(now);
 
     const layerHeight = Math.max(0, request.containerHeight) + 1;
     const areaLimit = (layerHeight * Math.max(0, request.area)) / 100;
-    const y =
-      this.rows.length === 0
-        ? OFFSET_TOP
-        : this.scan(areaLimit, layerHeight, height, now, middle, startX);
 
-    if (y === null) {
-      return null;
+    // 与 B 站一致：一组放不下时，只有显示区域不设上限才尝试下一组。
+    for (let index = 0; index < LAYER_LIMIT; index += 1) {
+      const list = this.rows[index];
+
+      if (list === undefined) {
+        this.insert(index, {
+          x: startX,
+          width,
+          speed,
+          middle,
+          endTime,
+          y: OFFSET_TOP,
+          bottom: OFFSET_TOP + height,
+        });
+
+        return { y: OFFSET_TOP, x: startX, translateX: -move, duration };
+      }
+      const y = this.scan(
+        list,
+        areaLimit,
+        layerHeight,
+        height,
+        now,
+        middle,
+        startX,
+      );
+
+      if (y !== null) {
+        this.insert(index, {
+          x: startX,
+          width,
+          speed,
+          middle,
+          endTime,
+          y,
+          bottom: y + height,
+        });
+
+        return { y, x: startX, translateX: -move, duration };
+      }
+
+      if (areaLimit > 0) {
+        return null;
+      }
     }
-    binsert(this.rows, {
-      x: startX,
-      width,
-      speed,
-      middle,
-      endTime,
-      y,
-      bottom: y + height,
-    });
-
-    return { y, x: startX, translateX: -move, duration };
+    return null;
   }
 
-  /** 扫描一个能装下 `height` 的 y，层满或超出显示区域时返回 `null`。 */
+  /** 丢掉已经离开的轨道。 */
+  private prune(now: number): void {
+    for (let index = 0; index < this.rows.length; index += 1) {
+      const list = this.rows[index];
+
+      if (list === undefined) {
+        continue;
+      }
+      const alive = list.filter(row => row.endTime > now);
+
+      list.length = 0;
+      list.push(...alive);
+    }
+  }
+
+  /** 把一条弹幕放进对应的碰撞层。 */
+  private insert(index: number, row: Row): void {
+    const list = this.rows[index] ?? [];
+
+    this.rows[index] = list;
+    binsert(list, row);
+  }
+
+  /**
+   * 找一个能放下 `height` 的 y 位置，没有空位或超出显示区域时返回 `null`。
+   *
+   * 与 B 站 `ea.add` 一致：横向和时间都错开、新弹幕追不上当前行时，
+   * 只有新弹幕底部不超过当前行底部，才检查 `hasDm`，否则保持候选位置
+   * 继续检查下一行。
+   */
   private scan(
+    list: readonly Row[],
     areaLimit: number,
     layerHeight: number,
     height: number,
@@ -239,62 +300,64 @@ export class SpaceManager {
     middle: number,
     startX: number,
   ): number | null {
-    const scan = (index: number, y: number): number | null => {
-      const bottom = y + height;
+    let current = OFFSET_TOP;
+
+    for (let index = 0; index < list.length; index += 1) {
+      const row = list[index];
+
+      if (row === undefined) {
+        break;
+      }
+      const bottom = current + height;
 
       if (bottom > layerHeight) {
         return null;
       }
-      const row = this.rows[index];
 
-      if (row === undefined) {
-        return y;
-      }
+      if (row.bottom <= current) {
+        // 当前行在候选位置上方时，B 站会把位置重置到行底部下方，并检查显示区域。
+        current = row.bottom + 1;
 
-      if (row.bottom <= y) {
-        return scan(index + 1, y);
+        if (areaLimit > 0 && current + height > areaLimit) {
+          return null;
+        }
+        continue;
       }
 
       if (row.y > bottom) {
-        return y;
+        return current;
       }
+      const canShare =
+        startX > (row.middle - now) * row.speed + row.width &&
+        middle > row.endTime + OVERLAP_SLACK;
 
-      if (this.shares(row, index, now, middle, startX, y, bottom)) {
-        return y;
+      if (canShare) {
+        if (
+          bottom > row.bottom ||
+          this.hasDm(list, index + 1, current, bottom)
+        ) {
+          continue;
+        }
+        return current;
       }
-      const next = row.bottom + 1;
+      current = row.bottom + 1;
 
       // B 站网页端在让位之后才检查显示区域，超出就丢弃。
-      if (areaLimit > 0 && next + height > areaLimit) {
+      if (areaLimit > 0 && current + height > areaLimit) {
         return null;
       }
-      return scan(index + 1, next);
-    };
-    return scan(0, OFFSET_TOP);
-  }
-
-  /** B 站网页端的碰撞判断：`t.x > s.x + s.width && t.middle > s.endTime + A`。 */
-  private shares(
-    row: Row,
-    index: number,
-    now: number,
-    middle: number,
-    startX: number,
-    top: number,
-    bottom: number,
-  ): boolean {
-    const rowX = (row.middle - now) * row.speed;
-
-    return (
-      startX > rowX + row.width &&
-      middle > row.endTime + OVERLAP_SLACK &&
-      !this.hasDm(index + 1, top, bottom)
-    );
+    }
+    return current + height <= layerHeight ? current : null;
   }
 
   /** B 站网页端的 `hasDm`：更下方是否还有一条也重叠。 */
-  private hasDm(from: number, top: number, bottom: number): boolean {
-    const row = this.rows.find(
+  private hasDm(
+    list: readonly Row[],
+    from: number,
+    top: number,
+    bottom: number,
+  ): boolean {
+    const row = list.find(
       (entry, index) => index >= from && entry.bottom >= top,
     );
 

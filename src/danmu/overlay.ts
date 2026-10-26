@@ -6,14 +6,18 @@
  * 每条弹幕的元素携带 `--fontSize`、`--textShadow` 等变量，
  * 加入 `-show` 类后开始动画。
  *
+ * 容器尺寸由浮层写入快照，插入时只读快照，
+ * 与 B 站播放器的 `manager.containerSize` 一致。
+ * 元素在动画结束后清空并回池，与渲染器的 `cycleDoms` 一致。
+ *
  * 本文件不依赖 React，视图层只负责把容器交给引擎。
  */
 
 import { type TextData, Mode } from '../conversation/decoder';
-import type { DanmuSettings } from '../stores/settings-store';
-import { CenterAllocator } from './center';
+import { type DanmuSettings, effectiveArea } from '../stores/settings-store';
+import { bottomOffset, CenterAllocator } from './center';
 import { getFontSize, REFERENCE_SIZE } from './font';
-import type { ConversationBoxStore } from './region';
+import { rollDanmuLimit, RollDanmuRateLimiter } from './rate-limit';
 import {
   DEFAULT_DURATION,
   DEFAULT_TIMING,
@@ -33,6 +37,12 @@ const FAMILY = "SimHei, 'Microsoft JhengHei'";
 const BOLD = true;
 /** B 站网页端默认描边类型：四向 1px 投影。 */
 const FONT_BORDER = 0;
+/**
+ * B 站渲染器的帧循环频率，来源：npd.491 的 `nextFrame({ fps: 30 })`。
+ * 销毁在帧回调里统一处理，不再给每条弹幕挂定时器。
+ */
+const FRAME_FPS = 30;
+const FRAME_INTERVAL = 1000 / FRAME_FPS;
 
 /** 描边颜色，与 B 站网页端的 `outlineColor` 一致：文字为黑时返回白，否则返回黑。 */
 function outlineColor(color: number): number {
@@ -54,30 +64,67 @@ function getShadow(color: number, fontBorder: number): string {
 /** 在给定容器里创建、排版和移除弹幕元素。 */
 export class DanmuOverlayEngine {
   private readonly container: HTMLElement;
-  private readonly region: ConversationBoxStore;
-  private readonly elements = new Set<HTMLDivElement>();
-  private readonly timers = new Set<number>();
+  private readonly active = new Map<
+    HTMLDivElement,
+    {
+      readonly mode: Mode;
+      readonly endTime: number;
+      readonly bottomY: number | null;
+    }
+  >();
+  private readonly pools = new Map<Mode, HTMLDivElement[]>();
+  private readonly rate = new RollDanmuRateLimiter();
+  private frame: number | null = null;
+  private framePrev = 0;
   private options: DanmuSettings;
   private layout: SpaceManager;
   private center: CenterAllocator;
+  private bottomCenter: CenterAllocator;
+  private containerWidth = 0;
+  private containerHeight = 0;
   private scale: {
     readonly key: string;
     readonly scale: SizeScale | null;
   } | null = null;
 
-  constructor(
-    container: HTMLElement,
-    region: ConversationBoxStore,
-    options: DanmuSettings,
-  ) {
+  constructor(container: HTMLElement, options: DanmuSettings) {
     this.container = container;
-    this.region = region;
     this.options = options;
     this.layout = new SpaceManager({
       speedPlus: options.speedPlus,
       defaultDuration: DEFAULT_TIMING.defaultDuration,
     });
     this.center = new CenterAllocator();
+    this.bottomCenter = new CenterAllocator();
+  }
+
+  /**
+   * 写入容器尺寸快照。
+   *
+   * 对应 B 站的 `manager.resize()` 与 `containerSize`
+   * （来源：npd.491 的 `resize` 与 `beforeCollisionCheck`），
+   * 插入时只读快照，不测量容器。底部弹幕按高度差平移，
+   * 与底部类的 `resize` 一致。
+   */
+  setContainerSize(width: number, height: number): void {
+    const delta = height - this.containerHeight;
+
+    this.containerWidth = width;
+    this.containerHeight = height;
+
+    if (delta === 0) {
+      return;
+    }
+
+    for (const [element, entry] of this.active) {
+      if (entry.bottomY === null) {
+        continue;
+      }
+      const next = entry.bottomY + delta;
+
+      this.active.set(element, { ...entry, bottomY: next });
+      element.style.setProperty('--translateY', `${next}px`);
+    }
   }
 
   /** 新设置只影响之后创建的弹幕，已渲染元素保持原样。 */
@@ -86,27 +133,32 @@ export class DanmuOverlayEngine {
     this.layout.setSpeedPlus(options.speedPlus);
   }
 
-  /** 移除当前全部弹幕并清空轨道状态。 */
+  /** 回收当前全部弹幕，清空轨道状态和速率窗口。 */
   clear(): void {
-    for (const timer of this.timers) {
-      window.clearTimeout(timer);
+    for (const [element, entry] of this.active) {
+      this.release(entry.mode, element);
     }
-    this.timers.clear();
-
-    for (const element of this.elements) {
-      element.remove();
-    }
-    this.elements.clear();
+    this.active.clear();
+    this.rate.reset();
+    this.stopFrame();
     this.layout = new SpaceManager({
       speedPlus: this.options.speedPlus,
       defaultDuration: DEFAULT_TIMING.defaultDuration,
     });
     this.center = new CenterAllocator();
+    this.bottomCenter = new CenterAllocator();
   }
 
-  /** 销毁引擎。 */
+  /** 销毁引擎，连同池里的元素一起移除。 */
   destroy(): void {
     this.clear();
+
+    for (const pool of this.pools.values()) {
+      for (const element of pool) {
+        element.remove();
+      }
+    }
+    this.pools.clear();
   }
 
   /** 字体的宽度基准，按字体族与字重缓存。 */
@@ -124,31 +176,135 @@ export class DanmuOverlayEngine {
     return scale;
   }
 
+  /**
+   * 取一个可复用元素。对应 B 站的 `cycleDoms`
+   * （来源：npd.491 的元素构造与 `destroy()`），回收的 div 留在容器里复用。
+   */
+  private acquire(mode: Mode): HTMLDivElement {
+    const element = this.pools.get(mode)?.pop();
+
+    if (element !== undefined) {
+      return element;
+    }
+    const created = document.createElement('div');
+
+    this.container.append(created);
+
+    return created;
+  }
+
+  /** 清空元素并放回对应模式的池子。 */
+  private release(mode: Mode, element: HTMLDivElement): void {
+    element.className = '';
+    element.textContent = '';
+    element.style.cssText = '';
+
+    const pool = this.pools.get(mode);
+
+    if (pool === undefined) {
+      this.pools.set(mode, [element]);
+
+      return;
+    }
+    pool.push(element);
+  }
+
+  /** 登记元素，交给帧循环在 `endTime` 之后回收。 */
+  private activate(
+    mode: Mode,
+    element: HTMLDivElement,
+    endTime: number,
+    bottomY: number | null = null,
+  ): void {
+    this.active.set(element, { mode, endTime, bottomY });
+    this.startFrame();
+  }
+
+  /**
+   * 启动 30fps 帧循环。
+   *
+   * 对应 B 站渲染器的帧驱动销毁（来源：npd.491 的 `e4` 节流 rAF 与
+   * `everyFrame("end")` 里的 `manager.render`）。没有弹幕时停掉，避免空转。
+   */
+  private startFrame(): void {
+    if (this.frame !== null) {
+      return;
+    }
+    this.framePrev = performance.now();
+    this.frame = window.requestAnimationFrame(this.tick);
+  }
+
+  /** 停止帧循环。 */
+  private stopFrame(): void {
+    if (this.frame === null) {
+      return;
+    }
+    window.cancelAnimationFrame(this.frame);
+    this.frame = null;
+  }
+
+  /** 每帧检查过期弹幕，没有存活弹幕时停止循环。 */
+  private readonly tick = (time: number): void => {
+    const elapsed = time - this.framePrev;
+
+    if (elapsed >= FRAME_INTERVAL) {
+      this.framePrev = time - (elapsed % FRAME_INTERVAL);
+      this.expire(performance.now() / 1000);
+    }
+
+    if (this.active.size === 0) {
+      this.frame = null;
+
+      return;
+    }
+    this.frame = window.requestAnimationFrame(this.tick);
+  };
+
+  /** 回收已经到达 `endTime` 的弹幕。 */
+  private expire(now: number): void {
+    for (const [element, entry] of this.active) {
+      if (entry.endTime > now) {
+        continue;
+      }
+      this.active.delete(element);
+      this.release(entry.mode, element);
+    }
+  }
+
   /** 追加一条弹幕。 */
   push(textData: TextData): void {
-    if (textData.mode !== Mode.Roll && textData.mode !== Mode.Top) {
+    const mode = textData.mode;
+
+    if (mode !== Mode.Roll && mode !== Mode.Top && mode !== Mode.Bottom) {
       return;
     }
     const current = this.options;
-
-    this.region.refresh();
-
-    const container = this.container;
-    const containerWidth = container.offsetWidth;
-    const containerHeight = container.offsetHeight;
+    const containerWidth = this.containerWidth;
+    const containerHeight = this.containerHeight;
 
     if (containerWidth <= 0 || containerHeight <= 0) {
       return;
     }
-    const now = performance.now() / 1000;
+    const nowMs = performance.now();
+    const now = nowMs / 1000;
+    const area = effectiveArea(current.area, current.density);
+
+    // B 站的每秒上限在碰撞检查之前生效，被碰撞丢弃的弹幕也占额度。
+    if (mode === Mode.Roll) {
+      const limit = rollDanmuLimit(area, containerHeight, current.fontSize);
+
+      if (!this.rate.admit(nowMs, limit)) {
+        return;
+      }
+    }
     const fontPx = getFontSize(
       REFERENCE_SIZE,
       containerHeight,
       current.fontSize,
       FULL_SCREEN_SYNC,
     );
-    const textScale = this.scaleFor(container);
-    const element = document.createElement('div');
+    const textScale = this.scaleFor(this.container);
+    const element = this.acquire(mode);
 
     element.className = DANMU_CLASS;
     element.textContent = textData.text;
@@ -161,7 +317,6 @@ export class DanmuOverlayEngine {
         '--color:#ffffff',
         `--textShadow:${getShadow(0xffffff, FONT_BORDER)}`,
       ].join(';') + ';';
-    container.append(element);
 
     const measured = textSize(textData.text, fontPx, textScale, () => {
       const rect = element.getBoundingClientRect();
@@ -169,23 +324,46 @@ export class DanmuOverlayEngine {
       return { width: rect.width, height: rect.height };
     });
 
-    if (textData.mode === Mode.Top) {
+    if (mode === Mode.Top) {
       const y = this.center.add({
         height: measured.height,
         now,
         containerHeight,
-        area: current.area,
+        area,
       });
 
       if (y === null) {
-        element.remove();
+        this.release(mode, element);
 
         return;
       }
-      this.elements.add(element);
       element.style.cssText += `--translateY:${y}px;`;
       element.classList.add(`${DANMU_CLASS}-center`, `${DANMU_CLASS}-show`);
-      this.removeAfter(element, DEFAULT_DURATION);
+      this.activate(mode, element, now + DEFAULT_DURATION);
+
+      return;
+    }
+
+    if (mode === Mode.Bottom) {
+      // 底部弹幕：独立槽位分配后翻到容器底部。当前没有事件映射和
+      // 设置入口，未来按消息类型配置位置时直接复用这个分支。
+      const top = this.bottomCenter.add({
+        height: measured.height,
+        now,
+        containerHeight,
+        area,
+      });
+
+      if (top === null) {
+        this.release(mode, element);
+
+        return;
+      }
+      const y = bottomOffset(containerHeight, measured.height, top);
+
+      element.style.cssText += `--translateY:${y}px;`;
+      element.classList.add(`${DANMU_CLASS}-center`, `${DANMU_CLASS}-show`);
+      this.activate(mode, element, now + DEFAULT_DURATION, y);
 
       return;
     }
@@ -195,31 +373,20 @@ export class DanmuOverlayEngine {
       now,
       containerWidth,
       containerHeight,
-      area: current.area,
+      area,
     });
 
     if (placement === null) {
-      element.remove();
+      this.release(mode, element);
 
       return;
     }
-    this.elements.add(element);
     element.style.cssText +=
       `--offset:${placement.x}px;` +
       `--translateX:${placement.translateX}px;` +
       `--duration:${placement.duration}s;` +
       `--top:${placement.y}px;`;
     element.classList.add(`${DANMU_CLASS}-roll`, `${DANMU_CLASS}-show`);
-    this.removeAfter(element, placement.duration);
-  }
-
-  private removeAfter(node: HTMLDivElement, seconds: number): void {
-    const timer = window.setTimeout(() => {
-      node.remove();
-      this.elements.delete(node);
-      this.timers.delete(timer);
-    }, seconds * 1000);
-
-    this.timers.add(timer);
+    this.activate(mode, element, now + placement.duration);
   }
 }
