@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   createSettingsStore,
   DEFAULT_SETTINGS,
+  effectiveArea,
   normaliseSettings,
   SETTINGS_STORAGE_KEY,
   SPEED_STEPS,
@@ -33,6 +34,7 @@ test('读取已保存设置', () => {
       fontSize: 1.2,
       opacity: 0.6,
       area: 30,
+      density: 3,
     }),
   );
   expect(createSettingsStore(storage).getSnapshot()).toEqual({
@@ -40,6 +42,7 @@ test('读取已保存设置', () => {
     fontSize: 1.2,
     opacity: 0.6,
     area: 25,
+    density: 3,
   });
 });
 test('非法 JSON 回退默认', () => {
@@ -55,12 +58,14 @@ test('越界值被钳制', () => {
       fontSize: 9,
       opacity: 0,
       area: 300,
+      density: 9,
     }),
   ).toEqual({
     speedPlus: 1,
     fontSize: 1.7,
     opacity: 0.1,
     area: 100,
+    density: 1,
   });
 });
 test('速度只接受档位', () => {
@@ -68,9 +73,26 @@ test('速度只接受档位', () => {
   expect(normaliseSettings({ speedPlus: 0.75 }).speedPlus).toBe(1);
   expect(SPEED_STEPS).toEqual([0.4, 0.7, 1, 1.3, 1.6]);
 });
-test('显示区域按 25 步进', () => {
+test('显示区域按 B 站的五个档位', () => {
+  expect(normaliseSettings({ area: 5 }).area).toBe(10);
   expect(normaliseSettings({ area: 30 }).area).toBe(25);
   expect(normaliseSettings({ area: 80 }).area).toBe(75);
+  expect(normaliseSettings({ area: 0 }).area).toBe(0);
+  expect(normaliseSettings({ area: -10 }).area).toBe(10);
+  expect(normaliseSettings({ area: 100 }).area).toBe(100);
+});
+test('密度只接受三个档位', () => {
+  expect(normaliseSettings({ density: 2 }).density).toBe(2);
+  expect(normaliseSettings({ density: 3 }).density).toBe(3);
+  expect(normaliseSettings({ density: 9 }).density).toBe(1);
+});
+test('有效显示区域由密度决定', () => {
+  expect(effectiveArea(50, 1)).toBe(50);
+  expect(effectiveArea(0, 1)).toBe(100);
+  expect(effectiveArea(0, 2)).toBe(100);
+  expect(effectiveArea(0, 3)).toBe(0);
+  expect(effectiveArea(100, 3)).toBe(0);
+  expect(effectiveArea(100, 1)).toBe(100);
 });
 test('不透明度和字号按 1% 步进', () => {
   expect(normaliseSettings({ opacity: 0.805 }).opacity).toBeCloseTo(0.81, 6);

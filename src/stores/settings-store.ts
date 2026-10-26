@@ -1,25 +1,34 @@
 /**
- * 弹幕设置：B 站网页端弹幕面板里可调的四项。
+ * 弹幕设置：B 站网页端弹幕面板里可调的五项。
  *
  * 默认值与取值范围取自 B 站播放器配置：
  * - `speedPlus` 默认 1，滑杆档位 `[0.4, 0.7, 1, 1.3, 1.6]`（`dmSetting` 的 `dmSpeedplus`）
  * - `fontSize` 默认 1，范围 0.5 到 1.7（`dmSetting` 的 `dmFontsize`）
  * - `opacity` 默认 0.8，渲染时下限钳到 0.1（`dmSetting.opacity`）
- * - `area` 默认 50，范围 0 到 100（`dmSetting.dmarea`）
+ * - `area` 默认 50，五档 10/25/50/75/100，0 是旧状态，显示在 100 档（`dmSetting.dmarea`）
+ * - `density` 默认 1，取值 1/2/3，对应面板的正常、较多、重叠（`dmSetting.dmdensity`）
  *
+ * 密度行只在显示区域为 0 或 100 时出现，见 {@link effectiveArea}。
  * 档位文案取自 B 站播放器 i18n：极慢、较慢、适中、较快、极快。
  */
 
-/** 弹幕面板可调的四项。 */
+/** 弹幕密度，与 B 站面板的「正常 / 较多 / 重叠」一一对应。 */
+export type DanmuDensity = 1 | 2 | 3;
+
+/** 弹幕面板可调的五项。 */
 export interface DanmuSettings {
   readonly speedPlus: number;
   readonly fontSize: number;
   readonly opacity: number;
   readonly area: number;
+  readonly density: DanmuDensity;
 }
 
 /** B 站速度滑杆的五个档位。 */
 export const SPEED_STEPS = [0.4, 0.7, 1, 1.3, 1.6] as const;
+
+/** B 站显示区域最小档，对应滑杆最左位置。 */
+export const AREA_MIN = 10;
 
 /** B 站弹幕面板的出厂值。 */
 export const DEFAULT_SETTINGS: DanmuSettings = {
@@ -27,6 +36,7 @@ export const DEFAULT_SETTINGS: DanmuSettings = {
   fontSize: 1,
   opacity: 0.8,
   area: 50,
+  density: 1,
 };
 
 /**
@@ -80,9 +90,28 @@ function normaliseSpeed(value: number | null): number {
   return DEFAULT_SETTINGS.speedPlus;
 }
 
-/** 显示区域按 25% 步进，对应 B 站面板的四个档位。 */
+/** 密度只接受三个档位，其他值回退到正常。 */
+function normaliseDensity(value: number | null): DanmuDensity {
+  return value === 2 || value === 3 ? value : 1;
+}
+
+/**
+ * B 站显示区域的五档：10、25、50、75、100。
+ *
+ * 0 是旧状态，原样保留并显示在 100 档。其余值按滑杆位置四舍五入，
+ * 平局取较大档，与 B 站滑杆的 `move` 一致。
+ */
 function normaliseArea(value: number | null): number {
-  return Math.round(clamp(value ?? DEFAULT_SETTINGS.area, 0, 100) / 25) * 25;
+  if (value === null) {
+    return DEFAULT_SETTINGS.area;
+  }
+
+  if (value === 0) {
+    return 0;
+  }
+  const rounded = Math.round(clamp(value, 1, 100) / 25) * 25;
+
+  return rounded === 0 ? AREA_MIN : rounded;
 }
 
 /** 把任意输入收窄成合法的设置，并把越界值钳到范围内。 */
@@ -98,7 +127,18 @@ export function normaliseSettings(value: unknown): DanmuSettings {
       clamp(readNumber(record.opacity) ?? DEFAULT_SETTINGS.opacity, 0.1, 1),
     ),
     area: normaliseArea(readNumber(record.area)),
+    density: normaliseDensity(readNumber(record.density)),
   };
+}
+
+/**
+ * 有效显示区域。
+ *
+ * 对应 B 站的 `effectiveDmArea`（来源：player-core.js）：
+ * 0 到 100 之间原样使用，0 和 100 时按密度取 100（正常、较多）或 0（重叠）。
+ */
+export function effectiveArea(area: number, density: DanmuDensity): number {
+  return area > 0 && area < 100 ? area : density === 3 ? 0 : 100;
 }
 
 function loadSettings(storage: SettingsStorage): DanmuSettings {
@@ -131,7 +171,8 @@ export function createSettingsStore(
       current.speedPlus === next.speedPlus &&
       current.fontSize === next.fontSize &&
       current.opacity === next.opacity &&
-      current.area === next.area
+      current.area === next.area &&
+      current.density === next.density
     ) {
       return;
     }

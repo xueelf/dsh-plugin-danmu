@@ -2,6 +2,10 @@
 export const en = {
   open: 'Danmu settings',
   displayArea: 'Display area',
+  density: 'Density',
+  densityNormal: 'Normal',
+  densityMore: 'More',
+  densityOverlap: 'Overlap',
   opacity: 'Opacity',
   fontSize: 'Font size',
   speed: 'Speed',

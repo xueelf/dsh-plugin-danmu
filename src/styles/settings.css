@@ -8,12 +8,16 @@
   outline: none;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   padding: 7px;
   display: inline-flex;
   position: relative;
 }
 .dsh-danmu-settings-button:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+.dsh-danmu-settings-icon {
+  flex: none;
 }
 .dsh-danmu-settings-glyph {
   font-size: 13px;
@@ -134,6 +138,10 @@
     color-mix(in srgb, var(--dsw-alias-label-primary) 30%, transparent);
   transform: translate(6px, -50%);
 }
+.dsh-danmu-settings-dot.dsh-danmu-settings-dot-start {
+  /* B 站进度条在位置 0 时把圆点右移 4px（translate3d(10px, -4px, 0)）。 */
+  transform: translate(10px, -50%);
+}
 .dsh-danmu-settings-steps {
   position: absolute;
   left: 6px;
@@ -154,6 +162,74 @@
 .dsh-danmu-settings-step {
   /* 宿主全局 corner-shape 是 superellipse，正圆必须显式 round。 */
   corner-shape: round;
+}
+.dsh-danmu-settings-density {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  width: 100%;
+  height: 26px;
+  margin-bottom: 16px;
+  border-radius: 2px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+.dsh-danmu-settings-density-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding-left: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.dsh-danmu-settings-density-options {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+.dsh-danmu-settings-density-option {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  user-select: none;
+}
+.dsh-danmu-settings-density-option[data-density='normal']::after,
+.dsh-danmu-settings-density-option[data-density='more']::after {
+  content: '';
+  display: inline-block;
+  width: 1px;
+  height: 13px;
+  margin-left: 15px;
+  background: var(--dsw-alias-border-l4);
+}
+.dsh-danmu-settings-density-option[data-density='most'] {
+  box-sizing: border-box;
+  margin-left: -7px;
+  padding-right: 4px;
+}
+.dsh-danmu-settings-density-option.dsh-danmu-settings-density-active {
+  color: var(--dsh-danmu-accent);
+}
+.dsh-danmu-settings-density-option:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid
+    var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary));
+  outline-offset: -2px;
+}
+.dsh-danmu-settings-row.dsh-danmu-settings-row-density {
+  margin-bottom: 10px;
 }
 .dsh-danmu-settings-reset {
   display: inline-flex;

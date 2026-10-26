@@ -15,7 +15,15 @@ export interface SliderProps {
   readonly max: number;
   readonly step: number;
   readonly current: number;
+  /** `aria-valuenow` 的语义值，默认使用滑杆位置。 */
+  readonly ariaValue?: number;
+  /** `aria-valuemin` 的语义值，默认使用滑杆最小值。 */
+  readonly ariaMin?: number;
+  /** `aria-valuemax` 的语义值，默认使用滑杆最大值。 */
+  readonly ariaMax?: number;
   readonly ticks?: readonly number[];
+  /** 追加到行容器的类名，例如密度出现时收窄下间距。 */
+  readonly rowClassName?: string;
   readonly onChange: (value: number) => void;
 }
 
@@ -122,7 +130,13 @@ export function SettingsSlider(props: SliderProps): ReactElement {
     props.onChange(Math.max(props.min, Math.min(props.max, next)));
   };
   return (
-    <div className="dsh-danmu-settings-row">
+    <div
+      className={
+        props.rowClassName === undefined
+          ? 'dsh-danmu-settings-row'
+          : `dsh-danmu-settings-row ${props.rowClassName}`
+      }
+    >
       <span className="dsh-danmu-settings-label">{props.label}</span>
       <div className="dsh-danmu-settings-area">
         <div
@@ -131,9 +145,9 @@ export function SettingsSlider(props: SliderProps): ReactElement {
           role="slider"
           tabIndex={0}
           aria-label={props.label}
-          aria-valuemin={props.min}
-          aria-valuemax={props.max}
-          aria-valuenow={displayValue}
+          aria-valuemin={props.ariaMin ?? props.min}
+          aria-valuemax={props.ariaMax ?? props.max}
+          aria-valuenow={props.ariaValue ?? displayValue}
           aria-valuetext={props.format(displayValue)}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -146,7 +160,13 @@ export function SettingsSlider(props: SliderProps): ReactElement {
             className="dsh-danmu-settings-bar"
             style={{ width: `${percent}%` }}
           >
-            <span className="dsh-danmu-settings-dot" />
+            <span
+              className={
+                percent === 0
+                  ? 'dsh-danmu-settings-dot dsh-danmu-settings-dot-start'
+                  : 'dsh-danmu-settings-dot'
+              }
+            />
           </div>
           {props.ticks === undefined ? null : (
             <div className="dsh-danmu-settings-steps" aria-hidden>

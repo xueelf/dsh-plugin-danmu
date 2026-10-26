@@ -4,6 +4,10 @@ import type { SettingsKey } from './en';
 export const zh: Record<SettingsKey, string> = {
   open: '弹幕设置',
   displayArea: '显示区域',
+  density: '弹幕密度',
+  densityNormal: '正常',
+  densityMore: '较多',
+  densityOverlap: '重叠',
   opacity: '不透明度',
   fontSize: '弹幕字号',
   speed: '弹幕速度',

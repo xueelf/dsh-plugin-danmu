@@ -4,7 +4,11 @@ import { useSettings } from '../hooks/use-settings';
 import { useSettingsPanel } from '../hooks/use-settings-panel';
 import type { Translate } from '../locales';
 import type { SettingsPanelStore } from '../stores/settings-panel-store';
-import { type DanmuSettingsStore, SPEED_STEPS } from '../stores/settings-store';
+import {
+  type DanmuSettingsStore,
+  AREA_MIN,
+  SPEED_STEPS,
+} from '../stores/settings-store';
 
 const SPEED_LABEL_KEYS = [
   'speedExtremelySlow',
@@ -15,9 +19,20 @@ const SPEED_LABEL_KEYS = [
 ] as const;
 /** B 站显示区域与弹幕速度的五个档位。 */
 const FIVE_STOP_TICKS = [0, 25, 50, 75, 100] as const;
+/** B 站面板的弹幕密度三档，只在显示区域为 0 或 100 时出现。 */
+const DENSITY_OPTIONS = [
+  { value: 1, key: 'densityNormal', name: 'normal' },
+  { value: 2, key: 'densityMore', name: 'more' },
+  { value: 3, key: 'densityOverlap', name: 'most' },
+] as const;
 
 function speedIndex(speedPlus: number): number {
   return SPEED_STEPS.findIndex(step => step === speedPlus);
+}
+
+/** 把存储的显示区域映射到滑杆位置。B 站把 0 显示在 100 档。 */
+function areaPosition(area: number): number {
+  return area === 0 ? 100 : area === AREA_MIN ? 0 : area;
 }
 
 /** 输入框上方的弹幕设置浮层。 */
@@ -105,6 +120,7 @@ export function createSettingsPanel(
     const maxHeight =
       rect === null ? 'calc(100vh - 24px)' : `${Math.max(0, rect.top - 20)}px`;
     const index = speedIndex(settings.speedPlus);
+    const densityVisible = settings.area === 0 || settings.area === 100;
 
     return (
       <div
@@ -118,14 +134,50 @@ export function createSettingsPanel(
       >
         <SettingsSlider
           label={t('displayArea')}
-          format={value => `${Math.round(value)}%`}
+          format={value => `${value === 0 ? AREA_MIN : value}%`}
           min={0}
           max={100}
           step={25}
-          current={settings.area}
+          current={areaPosition(settings.area)}
+          ariaMin={AREA_MIN}
+          ariaValue={settings.area === 0 ? 100 : settings.area}
           ticks={FIVE_STOP_TICKS}
-          onChange={value => store.update({ area: value })}
+          rowClassName={
+            densityVisible ? 'dsh-danmu-settings-row-density' : undefined
+          }
+          onChange={value =>
+            store.update({ area: value === 0 ? AREA_MIN : value })
+          }
         />
+        {densityVisible ? (
+          <div className="dsh-danmu-settings-density">
+            <div className="dsh-danmu-settings-density-label">
+              {t('density')}
+            </div>
+            <div
+              className="dsh-danmu-settings-density-options"
+              role="group"
+              aria-label={t('density')}
+            >
+              {DENSITY_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  data-density={option.name}
+                  className={
+                    settings.density === option.value
+                      ? 'dsh-danmu-settings-density-option dsh-danmu-settings-density-active'
+                      : 'dsh-danmu-settings-density-option'
+                  }
+                  aria-pressed={settings.density === option.value}
+                  onClick={() => store.update({ density: option.value })}
+                >
+                  {t(option.key)}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <SettingsSlider
           label={t('opacity')}
           format={value => `${Math.round(value)}%`}
@@ -151,6 +203,9 @@ export function createSettingsPanel(
           max={4}
           step={1}
           current={index}
+          ariaMin={SPEED_STEPS[0]}
+          ariaMax={SPEED_STEPS[4]}
+          ariaValue={settings.speedPlus}
           ticks={FIVE_STOP_TICKS}
           onChange={value => {
             const next = SPEED_STEPS[value];
