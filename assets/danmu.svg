@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="278" viewBox="0 0 1200 278" role="img"
+  aria-labelledby="danmu-banner-title">
+  <title id="danmu-banner-title">Looping danmu banner</title>
+  <style>
+    svg {
+      /* 单条弹幕的停留时长，等于 B 站的 tz。Github README 正文栏 max-width 838px，落在 tz 的 558 到 888 档，取 7.1 秒 */
+      --dwell: 7.1s;
+    }
+    .danmu {
+      font-family: SimHei, 'Microsoft JhengHei', Arial, Helvetica, sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      fill: #ffffff;
+      stroke: #000000;
+      stroke-width: 3px;
+      stroke-linejoin: round;
+    }
+    .roll {
+      /* 位移按文字自身的包围盒解析，终点 -100% 即整条移出画布，与文本长度无关 */
+      transform-box: fill-box;
+      animation-name: roll;
+      animation-duration: var(--dwell);
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+    @keyframes roll {
+      from {
+        transform: translateX(1200px);
+      }
+      to {
+        transform: translateX(-100%);
+      }
+    }
+  </style>
+  <g transform="translate(0 28)">
+    <g class="roll" transform="translate(1171 0)" style="animation-delay: -0.14s">
+      <text class="danmu" paint-order="stroke">我操，用户彻底怒了。</text>
+    </g>
+  </g>
+  <g transform="translate(0 62)">
+    <g class="roll" transform="translate(732 0)" style="animation-delay: -2.18s">
+      <text class="danmu" paint-order="stroke">你愿意和我发生性关系吗？</text>
+    </g>
+  </g>
+  <g transform="translate(0 96)">
+    <g class="roll" transform="translate(337 0)" style="animation-delay: -3.74s">
+      <text class="danmu" paint-order="stroke">你目录里的 dsh 是什么...大烧货吗？</text>
+    </g>
+  </g>
+  <g transform="translate(0 130)">
+    <g class="roll" transform="translate(963 0)" style="animation-delay: -1.32s">
+      <text class="danmu" paint-order="stroke">Hmm.</text>
+    </g>
+  </g>
+  <g transform="translate(0 164)">
+    <g class="roll" transform="translate(184 0)" style="animation-delay: -5.38s">
+      <text class="danmu" paint-order="stroke">Let me go.</text>
+    </g>
+  </g>
+  <g transform="translate(0 198)">
+    <g class="roll" transform="translate(1010 0)" style="animation-delay: -0.88s">
+      <text class="danmu" paint-order="stroke">服务器繁忙，请稍后再试。</text>
+    </g>
+  </g>
+  <g transform="translate(0 232)">
+    <g class="roll" transform="translate(560 0)" style="animation-delay: -2.54s">
+      <text class="danmu" paint-order="stroke">也许我该直接问 AI？但我就是 AI，要自己决定。</text>
+    </g>
+  </g>
+  <g transform="translate(0 266)">
+    <g class="roll" transform="translate(20 0)" style="animation-delay: -3.55s">
+      <text class="danmu" paint-order="stroke">用户发了一张蓝色大肥鱼的图片，很像某个应用的图标。等等，这个形状不就是我的 Logo 吗？</text>
+    </g>
+  </g>
+</svg>
