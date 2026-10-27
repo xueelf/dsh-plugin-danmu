@@ -1,5 +1,7 @@
 # dsh-plugin-danmu
 
+![弹幕示例](./assets/danmu.svg)
+
 为 DeepSeek Harness（dsh）提供实时弹幕，将智能体的推理、工具调用和任务进度等文本内容插入对话区域内滚动展示。
 
 使用其他语言阅读：[English](./README.md) | 简体中文

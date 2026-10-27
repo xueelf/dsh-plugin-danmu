@@ -1,5 +1,7 @@
 # dsh-plugin-danmu
 
+![Danmu example](./assets/danmu.svg)
+
 Real-time danmu for DeepSeek Harness (dsh). It inserts text such as the agent's reasoning, tool calls and task progress into the conversation area as scrolling text.
 
 Read this in other languages: English | [简体中文](./README.zh.md)
