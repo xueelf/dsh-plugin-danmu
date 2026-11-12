@@ -16,6 +16,10 @@
 .dsh-danmu-settings-button:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
+/* 面板打开期间按钮作为 CSS 锚点，同名的锚点按树序取最后一个，所以只在被点的按钮上挂名字。 */
+.dsh-danmu-settings-button[data-danmu-anchor] {
+  anchor-name: --dsh-danmu-panel;
+}
 .dsh-danmu-settings-icon {
   flex: none;
 }
@@ -31,6 +35,14 @@
   box-sizing: border-box;
   width: 320px;
   max-width: min(320px, calc(100vw - 24px));
+  /* 锚点定位在布局阶段解析，不读矩形也不监听窗口尺寸。
+     兜底参数对应旧实现里「没有可用锚点」的分支：left 12px，bottom 12px。 */
+  position-anchor: --dsh-danmu-panel;
+  left: clamp(12px, anchor(left, 0px), calc(100vw - 332px));
+  bottom: calc(anchor(top, 4px) + 8px);
+  /* anchor() 只在 inset 属性里有效，写进 max-height 会被丢弃。
+     面板内容 183px，旧上限（按钮上沿减 20px，实测 1231.9px）从未生效，
+     所以高度上限直接沿用样式表的值。 */
   max-height: calc(100vh - 24px);
   overflow-y: auto;
   z-index: 1100;

@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { type ReactElement, useRef } from 'react';
 import { useSettingsPanel } from '../hooks/use-settings-panel';
 import type { Translate } from '../locales';
 import type { SettingsPanelStore } from '../stores/settings-panel-store';
@@ -10,12 +10,17 @@ export function createSettingsButton(
 ): () => ReactElement {
   return function DanmuSettingsButton(): ReactElement {
     const state = useSettingsPanel(open);
+    const ref = useRef<HTMLButtonElement | null>(null);
+    // 同一时刻只允许一个按钮带锚点名，同名的锚点按树序取最后一个。
+    const anchored = state.anchor === ref.current;
 
     return (
       <button
+        ref={ref}
         type="button"
         className="dsh-danmu-settings-button"
         data-danmu-settings-button=""
+        data-danmu-anchor={anchored ? '' : undefined}
         aria-label={t('open')}
         aria-haspopup="dialog"
         aria-expanded={state.open}

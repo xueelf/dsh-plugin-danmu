@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef } from 'react';
 import { SettingsSlider } from '../components/SettingsSlider';
 import { useSettings } from '../hooks/use-settings';
 import { useSettingsPanel } from '../hooks/use-settings-panel';
@@ -46,19 +46,7 @@ export function createSettingsPanel(
     const settings = useSettings(store);
     const panelRef = useRef<HTMLDivElement | null>(null);
     const restoreFocusRef = useRef(false);
-    const [, setTick] = useState(0);
 
-    useEffect(() => {
-      if (!state.open) {
-        return undefined;
-      }
-      const onResize = (): void => {
-        setTick(tick => tick + 1);
-      };
-      window.addEventListener('resize', onResize);
-
-      return () => window.removeEventListener('resize', onResize);
-    }, [state.open]);
     useEffect(() => {
       if (!state.open) {
         return undefined;
@@ -108,17 +96,6 @@ export function createSettingsPanel(
     if (!state.open) {
       return null;
     }
-    const anchor = state.anchor;
-    const rect =
-      anchor?.isConnected === true ? anchor.getBoundingClientRect() : null;
-    const left =
-      rect === null
-        ? 12
-        : Math.max(12, Math.min(rect.left, window.innerWidth - 332));
-    const bottom =
-      rect === null ? 12 : Math.max(12, window.innerHeight - rect.top + 8);
-    const maxHeight =
-      rect === null ? 'calc(100vh - 24px)' : `${Math.max(0, rect.top - 20)}px`;
     const index = speedIndex(settings.speedPlus);
     const densityVisible = settings.area === 0 || settings.area === 100;
 
@@ -130,7 +107,6 @@ export function createSettingsPanel(
         role="dialog"
         aria-label={t('open')}
         tabIndex={-1}
-        style={{ left: `${left}px`, bottom: `${bottom}px`, maxHeight }}
       >
         <SettingsSlider
           label={t('displayArea')}
